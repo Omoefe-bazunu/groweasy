@@ -18,8 +18,8 @@ const BottomNav = () => {
     { path: "/documents", label: "Docs", icon: <File className="w-5 h-5" /> },
   ];
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/");
   };
 

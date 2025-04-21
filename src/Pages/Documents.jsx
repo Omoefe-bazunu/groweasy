@@ -140,7 +140,7 @@ const Documents = () => {
                 </div>
               </div>
               {expandedDocs[doc.id] && (
-                <div className="p-6 pt-0 space-y-4 border-t border-gray-200">
+                <div className="p-6 pt-2 space-y-4 border-t border-gray-200 ">
                   <div>
                     <h3 className="text-lg font-medium text-gray-800">
                       Description
@@ -182,7 +182,7 @@ const Documents = () => {
             >
               <X className="w-6 h-6 cursor-pointer" />
             </button>
-            <h2 className="text-lg font-semibold text-[#5247bf] mb-4">
+            <h2 className=" font-semibold text-[#5247bf] mb-4">
               Experts for {selectedDocument.name}
             </h2>
             {experts.length === 0 ? (
@@ -191,11 +191,11 @@ const Documents = () => {
               </p>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-2 gap-2 mb-4">
                   {currentExperts.map((expert) => (
                     <div
                       key={expert.id}
-                      className="flex items-center space-x-3 border p-3 rounded-lg"
+                      className="flex items-center space-x-3 border p-2 rounded-lg"
                     >
                       <img
                         src={expert.image}
@@ -213,7 +213,7 @@ const Documents = () => {
                           href={expert.chatLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-block mt-1 bg-[#5247bf] text-white px-4 py-1 rounded-full text-xs hover:bg-[#4238a6] transition-all duration-200"
+                          className="inline-block mt-2 bg-[#5247bf] text-white px-4 py-1 rounded-full text-xs hover:bg-[#4238a6] transition-all duration-200"
                         >
                           Chat
                         </a>
@@ -222,11 +222,11 @@ const Documents = () => {
                   ))}
                 </div>
                 {totalPages > 1 && (
-                  <div className="flex justify-between items-center">
+                  <div className="gap-4 flex items-center justify-center">
                     <button
                       onClick={handlePrevPage}
                       disabled={currentPage === 1}
-                      className="bg-gray-200 text-gray-800 px-3 py-1 rounded-lg hover:bg-gray-300 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-400"
+                      className="bg-[#5247bf] cursor-pointer text-white px-3 py-1 rounded-full hover:bg-gray-300 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-400"
                     >
                       Previous
                     </button>
@@ -236,7 +236,7 @@ const Documents = () => {
                     <button
                       onClick={handleNextPage}
                       disabled={currentPage === totalPages}
-                      className="bg-gray-200 text-gray-800 px-3 py-1 rounded-lg hover:bg-gray-300 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-400"
+                      className="bg-[#5247bf] cursor-pointer text-white px-3 py-1 rounded-full hover:bg-gray-300 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-400"
                     >
                       Next
                     </button>

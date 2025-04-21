@@ -4,7 +4,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  GoogleAuthProvider,
   signOut,
   updateProfile,
   sendEmailVerification,
@@ -79,31 +78,6 @@ export function UserProvider({ children }) {
     }
   };
 
-  const loginWithGoogle = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-      const user = userCredential.user;
-
-      // Google users are auto-verified, but we'll ensure a user document exists
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          name: user.displayName,
-          email: user.email,
-          phoneNumber: user.phoneNumber || "",
-          subscribed: false,
-          createdAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-
-      setUser(user);
-    } catch (error) {
-      throw new Error(error.message);
-    }
-  };
-
   const sendPasswordReset = async (email) => {
     try {
       await sendPasswordResetEmail(auth, email);
@@ -127,7 +101,6 @@ export function UserProvider({ children }) {
         user,
         loginWithEmail,
         signupWithEmail,
-        loginWithGoogle,
         sendPasswordReset,
         logout,
         loading,

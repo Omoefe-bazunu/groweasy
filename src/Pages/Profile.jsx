@@ -686,7 +686,7 @@ const Profile = () => {
                   {formData.socialLinks.map((link, index) => (
                     <div key={index} className="flex items-center space-x-2">
                       <input
-                        type="url"
+                        type="text"
                         name={`socialLinks-${index}`}
                         value={link}
                         onChange={handleInputChange}

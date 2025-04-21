@@ -13,7 +13,7 @@ const Login = () => {
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState("");
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const { loginWithEmail, loginWithGoogle, sendPasswordReset } = useUser();
+  const { loginWithEmail, sendPasswordReset } = useUser();
   const navigate = useNavigate();
 
   const handleEmailLogin = async (e) => {
@@ -35,18 +35,18 @@ const Login = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      await loginWithGoogle();
-      navigate("/dashboard");
-    } catch (error) {
-      setError(error.message || "Failed to log in with Google");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // const handleGoogleLogin = async () => {
+  //   setLoading(true);
+  //   setError("");
+  //   try {
+  //     await loginWithGoogle();
+  //     navigate("/dashboard");
+  //   } catch (error) {
+  //     setError(error.message || "Failed to log in with Google");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleOpenResetModal = () => {
     setIsResetModalOpen(true);
@@ -98,6 +98,7 @@ const Login = () => {
             <input
               type="email"
               id="email"
+              placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full p-3 text-gray-600 rounded-lg bg-gray-50"
@@ -114,6 +115,7 @@ const Login = () => {
             <input
               type="password"
               id="password"
+              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 rounded-lg bg-gray-50 text-gray-600"
@@ -131,17 +133,17 @@ const Login = () => {
             className="w-full bg-[#5247bf] text-white cursor-pointer p-3 rounded-lg hover:bg-[#4238a6] transition-all duration-300 shadow-md disabled:bg-gray-400"
             disabled={loading}
           >
-            {loading ? "Logging In..." : "Log In with Email"}
+            {loading ? "Logging In..." : "Log In"}
           </button>
         </form>
-        <button
+        {/* <button
           onClick={handleGoogleLogin}
           className="w-full mt-4 bg-gray-100 text-gray-800 p-3 cursor-pointer rounded-lg hover:bg-gray-200 transition-all duration-300 flex items-center justify-center space-x-2 shadow-md disabled:bg-gray-400"
           disabled={loading}
         >
           <FcGoogle className="w-5 h-5" />
           <span>{loading ? "Processing..." : "Log In with Google"}</span>
-        </button>
+        </button> */}
         <p className="mt-4 text-center text-gray-600 text-sm">
           Don’t have an account?{" "}
           <Link

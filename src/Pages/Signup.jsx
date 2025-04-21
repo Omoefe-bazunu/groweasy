@@ -11,7 +11,7 @@ const SignUp = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signupWithEmail, loginWithGoogle, logout } = useUser();
+  const { signupWithEmail, logout } = useUser();
   const navigate = useNavigate();
 
   const handleEmailSignUp = async (e) => {
@@ -39,19 +39,19 @@ const SignUp = () => {
     }
   };
 
-  const handleGoogleSignUp = async () => {
-    setLoading(true);
-    setError("");
-    setSuccess("");
-    try {
-      await loginWithGoogle();
-      navigate("/dashboard");
-    } catch (error) {
-      setError(error.message || "Failed to sign up with Google");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // const handleGoogleSignUp = async () => {
+  //   setLoading(true);
+  //   setError("");
+  //   setSuccess("");
+  //   try {
+  //     await loginWithGoogle();
+  //     navigate("/dashboard");
+  //   } catch (error) {
+  //     setError(error.message || "Failed to sign up with Google");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   return (
     <div className="min-h-screen bg-purple-50 flex items-center justify-center p-4">
@@ -74,6 +74,7 @@ const SignUp = () => {
             <input
               type="text"
               id="name"
+              placeholder="e.g Omoefe Bazunu"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full p-3 rounded-lg bg-gray-50 text-gray-600"
@@ -90,6 +91,7 @@ const SignUp = () => {
             <input
               type="email"
               id="email"
+              placeholder="e.g raniem57@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full p-3 rounded-lg bg-gray-50 text-gray-600"
@@ -106,6 +108,7 @@ const SignUp = () => {
             <input
               type="password"
               id="password"
+              placeholder="Enter a password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 rounded-lg bg-gray-50 text-gray-600"
@@ -122,6 +125,7 @@ const SignUp = () => {
             <input
               type="tel"
               id="phoneNumber"
+              placeholder="e.g +2349043970401"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
               className="w-full p-3 rounded-lg bg-gray-50 text-gray-600"
@@ -133,17 +137,17 @@ const SignUp = () => {
             className="w-full bg-[#5247bf] hover:bg-[#4238a6] text-white p-3 rounded-lg shadow-md cursor-pointer disabled:bg-gray-400"
             disabled={loading}
           >
-            {loading ? "Signing Up..." : "Sign Up with Email"}
+            {loading ? "Signing Up..." : "Sign Up"}
           </button>
         </form>
-        <button
+        {/* <button
           onClick={handleGoogleSignUp}
           className="w-full mt-4 bg-gray-100 cursor-pointer text-gray-800 p-3 rounded-lg hover:bg-gray-200 transition-all duration-300 flex items-center justify-center space-x-2 shadow-md disabled:bg-gray-400"
           disabled={loading}
         >
           <FcGoogle className="w-5 h-5" />
           <span>{loading ? "Processing..." : "Sign Up with Google"}</span>
-        </button>
+        </button> */}
         <p className="mt-4 text-center text-gray-600 text-sm">
           Already have an account?{" "}
           <Link
