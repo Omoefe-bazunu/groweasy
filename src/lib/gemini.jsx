@@ -1,89 +1,201 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${
+  import.meta.env.VITE_APP_GEMINI_API_KEY
+}`;
 
-// Initialize the Gemini API client with the API key from .env
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-
-// Function to generate a content plan using Gemini 1.5 Flash
-export const generateContentPlan = async (contentInfo) => {
+export const generateContentPlan = async (formData) => {
   try {
-    // Get the Gemini 1.5 Flash model
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Validate API key
+    const apiKey = import.meta.env.VITE_APP_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("Gemini API key is missing (VITE_APP_GEMINI_API_KEY)");
+    }
 
-    // Create a prompt for generating a content plan
+    // Ensure contentTypes is a string
+    const contentTypes = Array.isArray(formData.contentTypes)
+      ? formData.contentTypes.join(", ")
+      : formData.contentTypes || "Not specified";
+
+    // Parse numberOfDays and ensure it's an integer
+    const numberOfDays = parseInt(formData.numberOfDays, 10);
+    if (isNaN(numberOfDays) || numberOfDays < 1) {
+      throw new Error("Number of days must be a positive integer");
+    }
+
+    // Calculate the number of posts and their due dates based on posting frequency
+    let postDates = [];
+    const startDate = new Date("2025-05-01");
+    let frequencyDays;
+
+    switch (formData.postingFrequency) {
+      case "Daily":
+        frequencyDays = 1;
+        break;
+      case "Every Other Day":
+        frequencyDays = 2;
+        break;
+      case "Weekly":
+        frequencyDays = 7;
+        break;
+      case "Bi-Weekly":
+        frequencyDays = 14;
+        break;
+      default:
+        throw new Error("Invalid posting frequency");
+    }
+
+    // Generate post dates based on frequency and numberOfDays
+    for (let day = 1; day <= numberOfDays; day += frequencyDays) {
+      const postDate = new Date(startDate);
+      postDate.setDate(startDate.getDate() + (day - 1));
+      postDates.push(postDate.toISOString().split("T")[0]); // Format as YYYY-MM-DD
+    }
+
+    // Stricter prompt to enforce JSON-only output
     const prompt = `
-      Generate a detailed content plan based on the following details:
-      - Business Name: ${contentInfo.businessName || "Generic Business"}
-      - Nature of Business: ${contentInfo.nature || "Not specified"}
-      - Description: ${
-        contentInfo.description || "A business providing innovative solutions."
+You are a content marketing strategist. Based on the following details, generate a content plan as a JSON array. **Return ONLY the JSON array** with no additional text, markdown, explanations, or comments. The output must be pure JSON, parsable by JSON.parse(), with no prefix, suffix, or markdown (e.g., no \`\`\`json markers). Do not include any introductory text, code blocks, or trailing text.
+
+Format:
+[
+  {
+    "id": 1,
+    "dueDate": "2025-05-01",
+    "bestPostingTime": "10:00 AM",
+    "content": "A detailed description of the post",
+    "imagePrompt": "A prompt for generating an image (if applicable)",
+    "videoPrompt": "A prompt for generating a video (if applicable)"
+  },
+  {...},
+  {...}
+]
+
+Details:
+- Business Name: ${formData.businessName}
+- Nature: ${formData.nature}
+- Description: ${formData.description}
+- Goals: ${formData.businessGoals}
+- Target Audience: ${formData.targetAudience}
+- Content Types: ${contentTypes}
+- Posting Frequency: ${formData.postingFrequency}
+- Tone of Voice: ${formData.toneOfVoice}
+- Extra Notes: ${formData.extraNotes || "None"}
+- Duration: ${numberOfDays} days
+- Post Dates: ${postDates.join(", ")}
+
+Generate exactly ${
+      postDates.length
+    } posts, scheduling them on the following dates: ${postDates.join(
+      ", "
+    )}. Ensure due dates are in "YYYY-MM-DD" format, matching the provided post dates. Include imagePrompt and videoPrompt only if the content type includes "Social Media Campaigns". Use the tone of voice specified and tailor the content to the target audience and business goals.
+
+**Output only the JSON array, nothing else. No markdown, no \`\`\`json, no extra text.**
+`;
+
+    console.log("Sending request to Gemini API with prompt:", prompt);
+
+    const response = await fetch(GEMINI_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API response error:", response.status, errorText);
+      throw new Error(`Gemini API failed: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log("Raw Gemini API response:", data);
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      console.error("No content received from Gemini API:", data);
+      throw new Error("No content received from Gemini API");
+    }
+
+    console.log("Extracted text from Gemini API:", text);
+
+    // Preprocess the response to remove markdown code blocks
+    let cleanedText = text.trim();
+    cleanedText = cleanedText.replace(/```json\n?/, "").replace(/```\n?/, "");
+    cleanedText = cleanedText.trim();
+
+    console.log("Cleaned text after removing markdown:", cleanedText);
+
+    // Attempt to parse the response as JSON
+    let jsonArray;
+    try {
+      jsonArray = JSON.parse(cleanedText);
+    } catch (parseError) {
+      console.error("Failed to parse Gemini API response as JSON:", parseError);
+      console.error("Cleaned response text:", cleanedText);
+
+      // Fallback: Attempt to extract JSON array using regex
+      const match = cleanedText.match(/\[\s*{[\s\S]*?}\s*\]/);
+      if (!match) {
+        throw new Error("Failed to extract valid JSON array from response");
       }
-      - Business Goals: ${
-        contentInfo.businessGoals || "Increase brand awareness"
+
+      try {
+        jsonArray = JSON.parse(match[0]);
+      } catch (secondParseError) {
+        console.error(
+          "Failed to parse extracted JSON array:",
+          secondParseError
+        );
+        throw new Error("Invalid JSON array in Gemini API response");
       }
-      - Target Audience: ${contentInfo.targetAudience || "General audience"}
-      - Preferred Content Type: ${contentInfo.contentTypes || "Blog posts"}
-      - Duration of Plan: ${contentInfo.numberOfDays || "30"} days
+    }
 
-      The content plan should include 3 content items, each with:
-      - A due date (e.g., "2025-05-01") within the specified duration starting from today (April 20, 2025).
-      - The best posting time for the content (e.g., "10:00 AM").
-      - The full content text or ad copy to be used (not just a title).
-      - For Social Media campaigns (Instagram, Twitter, LinkedIn), tailor the content for the specified platform and include:
-        - An image prompt for generating accompanying images (e.g., "A vibrant image of a tech startup team working together").
-        - A video prompt for generating accompanying videos (e.g., "A 15-second video showing a product demo with upbeat music").
-      - Do NOT include a status field.
+    // Validate that the result is an array
+    if (!Array.isArray(jsonArray)) {
+      console.error("Gemini API response is not an array:", jsonArray);
+      throw new Error("Gemini API response is not a valid JSON array");
+    }
 
-      Return the result in the following JSON format:
-      [
-        {
-          "id": 1,
-          "dueDate": "2025-05-01",
-          "bestPostingTime": "10:00 AM",
-          "content": "Full text or ad copy for the content item",
-          "imagePrompt": "Optional image prompt for social media",
-          "videoPrompt": "Optional video prompt for social media"
-        },
-        ...
-      ]
-    `;
+    // Ensure the number of posts matches the expected count
+    if (jsonArray.length !== postDates.length) {
+      console.warn(
+        `Expected ${postDates.length} posts, but received ${jsonArray.length}. Adjusting...`
+      );
+      // Truncate or pad the array as needed
+      jsonArray = jsonArray.slice(0, postDates.length);
+      while (jsonArray.length < postDates.length) {
+        jsonArray.push({
+          id: jsonArray.length + 1,
+          dueDate: postDates[jsonArray.length],
+          bestPostingTime: "10:00 AM",
+          content: "Default content (placeholder)",
+          imagePrompt: "",
+          videoPrompt: "",
+        });
+      }
+    }
 
-    // Generate content using the Gemini API
-    const result = await model.generateContent(prompt);
-    const responseText = await result.response.text();
+    // Ensure each item has required fields and correct due dates
+    const validatedArray = jsonArray.map((item, index) => ({
+      id: item.id || index + 1,
+      dueDate: postDates[index] || "2025-05-01",
+      bestPostingTime: item.bestPostingTime || "10:00 AM",
+      content: item.content || "Default content",
+      imagePrompt: item.imagePrompt || "",
+      videoPrompt: item.videoPrompt || "",
+    }));
 
-    // Parse the response as JSON
-    const contentPlan = JSON.parse(responseText);
-
-    return contentPlan;
+    console.log("Validated content plan:", validatedArray);
+    return validatedArray;
   } catch (error) {
-    console.error("Error generating content plan with Gemini:", error);
-    // Fallback to dummy data in case of an error
-    return [
-      {
-        id: 1,
-        dueDate: "2025-05-01",
-        bestPostingTime: "10:00 AM",
-        content:
-          "Blog Post: Discover the latest tech trends for 2025 to stay ahead in the industry.",
-      },
-      {
-        id: 2,
-        dueDate: "2025-05-15",
-        bestPostingTime: "2:00 PM",
-        content:
-          'Instagram Post: "🚀 Exciting Product Launch! Check out our new AI tool designed for startups. #TechInnovators #ProductLaunch"',
-        imagePrompt:
-          "A sleek image of our new AI tool in action with a startup team in the background.",
-        videoPrompt:
-          "A 15-second video showcasing the AI tool’s features with upbeat music and a startup office setting.",
-      },
-      {
-        id: 3,
-        dueDate: "2025-05-10",
-        bestPostingTime: "9:00 AM",
-        content:
-          "Email Newsletter: Subject: Your Monthly Tech Update - May 2025\n\nHello [Name],\n\nThis month, we’re excited to share the latest updates in tech...",
-      },
-    ];
+    console.error("Gemini REST API error:", error);
+    return []; // Return an empty array as a fallback to prevent breaking the UI
   }
 };

@@ -7,31 +7,30 @@ service cloud.firestore {
     }
     
     match /plans/{planId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-    }
-    
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    match /blogPosts/{blogpostId} {
-      // Allow public read access
-      allow read: if true;
-      
-      // Only allow writes if:
-      // 1. User is authenticated
-      // 2. For updates/deletes, user must be the original author
-      // 3. For creates, must include userId matching auth uid
-      allow create: if request.auth != null && 
-                    request.resource.data.userId == request.auth.uid;
-                    
-      allow update, delete: if request.auth != null && 
-                            resource.data.userId == request.auth.uid;
-    }
-    
-    match /experts/{expertId} {
-      allow read: if true; // Allow public read access
-      allow write: if request.auth != null; // Only authenticated users can add experts
-    }
+  allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+  allow create, update: if request.auth != null && request.resource.data.userId == request.auth.uid;
+  allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+}
+
+match /users/{userId} {
+  allow read, write: if request.auth != null && request.auth.uid == userId;
+}
+
+match /contacts/{contactId} {
+  allow read, write;
+}
+
+match /blogPosts/{blogpostId} {
+  allow read: if true;
+  allow create: if request.auth != null && 
+                request.resource.data.userId == request.auth.uid;
+  allow update, delete: if request.auth != null && 
+                        resource.data.userId == request.auth.uid;
+}
+
+match /experts/{expertId} {
+  allow read: if true;
+  allow write: if request.auth != null;
+}
   }
 }

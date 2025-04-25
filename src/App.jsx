@@ -10,6 +10,10 @@ import PublicProfile from "./Pages/PublicProfile";
 import Documents from "./Pages/Documents";
 import AddExpert from "./Pages/AddExpert";
 import BottomNav from "./components/BottomNav";
+import TopNav from "./components/Header";
+import About from "./Pages/About";
+import Contact from "./Pages/Contact";
+import ImageGenerator from "./Pages/CreateImage";
 
 const App = () => {
   const location = useLocation();
@@ -17,13 +21,17 @@ const App = () => {
   const isPublicProfile = location.pathname.startsWith("/public-profile");
 
   return (
-    <div className=" bg-gray-50">
+    <div className=" bg-white">
+      {!hideNavPaths.includes(location.pathname) && !isPublicProfile && (
+        <TopNav />
+      )}
       <Routes>
         <Route path="/" element={<Onboarding />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/content-plan" element={<ContentPlan />} />
+        <Route path="/create-images" element={<ImageGenerator />} />
         <Route
           path="/content-creation-board"
           element={<ContentCreationBoard />}
@@ -32,6 +40,9 @@ const App = () => {
         <Route path="/documents" element={<Documents />} />
         <Route path="/add-expert" element={<AddExpert />} />
         <Route path="/public-profile/:userId" element={<PublicProfile />} />
+        <Route path="/add-expert" element={<AddExpert />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
       </Routes>
       {!hideNavPaths.includes(location.pathname) && !isPublicProfile && (
         <BottomNav />
