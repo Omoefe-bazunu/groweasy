@@ -218,7 +218,7 @@ const ContentPlan = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white p-6 pb-20">
+    <div className="min-h-screen  p-6 pb-20">
       <h1 className="text-3xl font-extrabold text-[#5247bf] mb-8 text-center">
         Your Content Plans
       </h1>

@@ -90,7 +90,7 @@ const AddExpert = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white p-6">
+    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white px-6 pt-6 pb-20">
       <h1 className="text-3xl font-extrabold text-[#5247bf] mb-8 text-center">
         Add Expert
       </h1>
@@ -155,7 +155,7 @@ const AddExpert = () => {
               htmlFor="chatLink"
               className="block text-gray-700 font-medium mb-1"
             >
-              Chat Link (WhatsApp or Website URL)
+              Chat Link (WhatsApp or Website)
             </label>
             <input
               type="url"

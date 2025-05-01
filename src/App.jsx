@@ -14,6 +14,9 @@ import TopNav from "./components/Header";
 import About from "./Pages/About";
 import Contact from "./Pages/Contact";
 import ImageGenerator from "./Pages/CreateImage";
+import Testimonials from "./Pages/Testimonials";
+import Subscription from "./Pages/Subscription";
+import AdminDashboard from "./Pages/AdminDashboard";
 
 const App = () => {
   const location = useLocation();
@@ -40,8 +43,11 @@ const App = () => {
         <Route path="/documents" element={<Documents />} />
         <Route path="/add-expert" element={<AddExpert />} />
         <Route path="/public-profile/:userId" element={<PublicProfile />} />
-        <Route path="/add-expert" element={<AddExpert />} />
+        <Route path="/admin/add-expert" element={<AddExpert />} />
         <Route path="/about" element={<About />} />
+        <Route path="/testimonials" element={<Testimonials />} />
+        <Route path="/subscribe" element={<Subscription />} />
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/contact" element={<Contact />} />
       </Routes>
       {!hideNavPaths.includes(location.pathname) && !isPublicProfile && (

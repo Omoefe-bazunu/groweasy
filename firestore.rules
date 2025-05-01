@@ -6,31 +6,50 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
     
-    match /plans/{planId} {
+  // Testimonials collection: unchanged
+match /testimonials/{testimonialId} {
+  allow read: if true;
+  allow create: if request.auth != null;
+  allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+}
+
+// Plans collection: unchanged
+match /plans/{planId} {
   allow read: if request.auth != null && resource.data.userId == request.auth.uid;
   allow create, update: if request.auth != null && request.resource.data.userId == request.auth.uid;
   allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
 }
 
+// Users collection: Allow raniem57@gmail.com to read/write all documents
 match /users/{userId} {
-  allow read, write: if request.auth != null && request.auth.uid == userId;
+  allow read: if request.auth != null && 
+               (request.auth.uid == userId || request.auth.token.email == "raniem57@gmail.com");
+  allow write: if request.auth != null && 
+                (request.auth.uid == userId || request.auth.token.email == "raniem57@gmail.com");
 }
 
+
+
+// Contacts collection: unchanged
 match /contacts/{contactId} {
   allow read, write;
 }
 
-match /blogPosts/{blogpostId} {
-  allow read: if true;
-  allow create: if request.auth != null && 
-                request.resource.data.userId == request.auth.uid;
-  allow update, delete: if request.auth != null && 
-                        resource.data.userId == request.auth.uid;
-}
-
+// Experts collection: unchanged
 match /experts/{expertId} {
   allow read: if true;
   allow write: if request.auth != null;
+}
+
+// Subscription Requests collection: Allow raniem57@gmail.com to manage
+match /subscriptionRequests/{requestId} {
+  allow create: if request.auth != null;
+  allow read, update, delete: if request.auth != null && request.auth.token.email == "raniem57@gmail.com";
+}
+
+// Admins collection: Allow raniem57@gmail.com to manage
+match /admins/{adminId} {
+  allow read, write: if request.auth != null && request.auth.token.email == "raniem57@gmail.com";
 }
   }
 }

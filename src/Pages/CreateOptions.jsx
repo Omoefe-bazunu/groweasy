@@ -58,7 +58,9 @@ const CreateOptions = ({ onClose }) => {
         >
           <Video className="w-6 h-6 text-[#5247bf]" />
           <div className="flex-1">
-            <h3 className=" font-semibold text-gray-800">Create Videos</h3>
+            <h3 className=" font-semibold text-gray-800">
+              Create Videos (Coming Soon)
+            </h3>
           </div>
           <button className="bg-[#5247bf] text-white px-3 py-1 rounded-lg hover:bg-[#4238a6] transition-all duration-200">
             Create

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Info } from "lucide-react/";
+import { Info } from "lucide-react";
+import { FaStar } from "react-icons/fa"; // Add FaStar for testimonials icon
 import CreateOptions from "../Pages/CreateOptions";
 import { IoCreate } from "react-icons/io5";
 import { MdContactPage } from "react-icons/md";
@@ -17,21 +18,25 @@ const TopNav = () => {
     navigate("/about");
   };
 
+  const handleTestimonialsClick = () => {
+    navigate("/testimonials");
+  };
+
   const toggleCreateOptions = () => {
     setShowCreateOptions((prev) => !prev);
   };
 
   return (
-    <nav className="bg-white shadow-md px-12 flex justify-between items-center sticky top-0 z-50 max-w-2xl mx-auto left-0 right-0 rounded-b-xl py-2 ">
+    <nav className="bg-white shadow-md px-12 flex justify-between items-center sticky top-0 z-50 max-w-2xl mx-auto left-0 right-0 rounded-b-xl py-2">
       {/* Brand Logo */}
       <div className="flex items-center">
         <img
-          src="/gelogo.png" // Replace with your actual logo path
+          src="/gelogo.png"
           alt="Brand Logo"
           className="h-10 w-auto"
           onError={(e) =>
             (e.target.src = "https://via.placeholder.com/150x50?text=Logo")
-          } // Fallback if logo is missing
+          }
         />
       </div>
 
@@ -50,6 +55,13 @@ const TopNav = () => {
           title="About"
         >
           <Info className="w-6 h-6" />
+        </button>
+        <button
+          onClick={handleTestimonialsClick}
+          className="text-gray-500 hover:text-[#5247bf] transition-all duration-200 cursor-pointer"
+          title="Testimonials"
+        >
+          <FaStar className="w-6 h-6" />
         </button>
         <button
           onClick={toggleCreateOptions}

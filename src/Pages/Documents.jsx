@@ -108,9 +108,9 @@ const Documents = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white p-6 pb-20">
+    <div className="min-h-screen  p-6 pb-20">
       <h1 className="text-3xl font-extrabold text-[#5247bf] mb-2 text-center">
-        Required Documents
+        Important Documents
       </h1>
       <p className="text-xs text-gray-600 mb-6 w-full text-center">
         Tap on each item to see details

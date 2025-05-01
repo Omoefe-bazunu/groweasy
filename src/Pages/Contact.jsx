@@ -25,7 +25,7 @@ const Contact = () => {
     setSuccess("");
 
     try {
-      await addDoc(collection(db, "contact"), {
+      await addDoc(collection(db, "contacts"), {
         name: formData.name,
         email: formData.email,
         message: formData.message,
