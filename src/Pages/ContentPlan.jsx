@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
+import { useNavigate } from "react-router-dom";
 import { db } from "../lib/firebase";
 import {
   collection,
@@ -10,7 +11,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { jsPDF } from "jspdf";
-import { ChevronDown, ChevronUp, Download, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Download, Trash2 } from "lucide-react";
 
 const ContentPlan = () => {
   const { user } = useUser();
@@ -18,6 +19,10 @@ const ContentPlan = () => {
   const [expandedPlans, setExpandedPlans] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState({});
+  const navigate = useNavigate();
+
+  const handleCreateContentPlan = () => navigate("/content-creation-board");
 
   // Fetch all plans for the current user from Firestore
   useEffect(() => {
@@ -58,6 +63,29 @@ const ContentPlan = () => {
       ...prev,
       [planId]: !prev[planId],
     }));
+  };
+
+  // Copy text to clipboard
+  const handleCopy = (text, itemId, field) => {
+    if (!text || text === "-") return;
+
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopyFeedback((prev) => ({
+          ...prev,
+          [`${itemId}-${field}`]: true,
+        }));
+        setTimeout(() => {
+          setCopyFeedback((prev) => ({
+            ...prev,
+            [`${itemId}-${field}`]: false,
+          }));
+        }, 2000);
+      })
+      .catch((err) => {
+        console.error("Failed to copy text:", err);
+      });
   };
 
   // Download a plan as PDF
@@ -145,11 +173,7 @@ const ContentPlan = () => {
       yPosition,
       { maxWidth: 190, lineHeight: 5 }
     );
-    addText(
-      `Content Types: ${plan.formData.contentTypes.join(", ")}`,
-      margin,
-      yPosition
-    );
+    addText(`Content Type: ${plan.formData.contentTypes}`, margin, yPosition);
     addText(
       `Posting Frequency: ${plan.formData.postingFrequency}`,
       margin,
@@ -172,23 +196,14 @@ const ContentPlan = () => {
     addText("Content Plan Schedule", margin, yPosition);
 
     doc.setFontSize(10);
-    const colWidths = [20, 25, 25, 50, 40, 40];
-    const headers = [
-      "ID",
-      "Due Date",
-      "Best Time",
-      "Content",
-      "Image Prompt",
-      "Video Prompt",
-    ];
+    const colWidths = [30, 60, 50, 50];
+    const headers = ["Day", "Content", "Image Prompt", "Video Prompt"];
     drawTableRow(headers, colWidths);
 
     doc.setFont("helvetica", "normal");
     plan.contentPlan.forEach((item) => {
       const row = [
-        item.id.toString(),
-        item.dueDate,
-        item.bestPostingTime,
+        item.Day.toString(),
         item.content,
         item.imagePrompt || "-",
         item.videoPrompt || "-",
@@ -199,8 +214,16 @@ const ContentPlan = () => {
     doc.save(`${plan.name || "content-plan"}.pdf`);
   };
 
-  // Delete a plan from Firestore
-  const handleDeletePlan = async (planId) => {
+  // Delete a plan from Firestore with confirmation
+  const handleDeletePlan = async (planId, planName) => {
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the content plan "${planName}"? This action cannot be undone.`
+    );
+    if (!confirmDelete) {
+      console.log("Deletion cancelled for plan:", planId);
+      return;
+    }
+
     try {
       console.log("Deleting plan with ID:", planId);
       await deleteDoc(doc(db, "plans", planId));
@@ -218,7 +241,7 @@ const ContentPlan = () => {
   };
 
   return (
-    <div className="min-h-screen  p-6 pb-20">
+    <div className="min-h-screen p-6 pb-32">
       <h1 className="text-3xl font-extrabold text-[#5247bf] mb-8 text-center">
         Your Content Plans
       </h1>
@@ -233,20 +256,28 @@ const ContentPlan = () => {
         </div>
       ) : plans.length === 0 ? (
         <div className="text-center">
-          <p className="text-gray-600 mb-4">No content plans found.</p>
+          <p className="text-gray-600 mb-4">
+            No content plans found. <br />{" "}
+            <span
+              className="text-[#5247bf] cursor-pointer font-semibold"
+              onClick={handleCreateContentPlan}
+            >
+              Create Content Plan
+            </span>
+          </p>
         </div>
       ) : (
-        <div className="max-w-4xl mx-auto h-[calc(100vh-12rem)] overflow-y-auto">
+        <div className="max-w-4xl mx-auto max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-[#5247bf] scrollbar-track-gray-100">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800">
-              Your Plans ({plans.length})
+            <h2 className="text-xl font-semibold text-gray-800 w-full text-center">
+              TOTAL COUNT ({plans.length})
             </h2>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-6">
             {plans.map((plan) => (
               <div
                 key={plan.id}
-                className="bg-white rounded-xl shadow-lg hover:bg-purple-50 transition-all duration-300"
+                className="bg-gray-50 rounded-xl shadow-lg hover:bg-purple-100 transition-all duration-300"
               >
                 <div
                   className="p-4 flex items-center justify-between cursor-pointer"
@@ -267,9 +298,7 @@ const ContentPlan = () => {
                       <table className="min-w-full bg-gray-50 rounded-lg border border-gray-200">
                         <thead>
                           <tr className="bg-[#5247bf] text-white">
-                            <th className="p-3 text-left">ID</th>
-                            <th className="p-3 text-left">Due Date</th>
-                            <th className="p-3 text-left">Best Posting Time</th>
+                            <th className="p-3 text-left">Day</th>
                             <th className="p-3 text-left">Content</th>
                             <th className="p-3 text-left">Image Prompt</th>
                             <th className="p-3 text-left">Video Prompt</th>
@@ -278,24 +307,82 @@ const ContentPlan = () => {
                         <tbody>
                           {plan.contentPlan.map((item) => (
                             <tr
-                              key={item.id}
+                              key={item.Day}
                               className="border-b border-gray-200"
                             >
-                              <td className="p-3 text-gray-800">{item.id}</td>
-                              <td className="p-3 text-gray-800">
-                                {item.dueDate}
+                              <td className="p-3 text-gray-800">{item.Day}</td>
+                              <td className="p-3 text-gray-800 relative group">
+                                <div className="flex items-center space-x-2">
+                                  <span>{item.content}</span>
+                                  <button
+                                    onClick={() =>
+                                      handleCopy(
+                                        item.content,
+                                        item.Day,
+                                        "content"
+                                      )
+                                    }
+                                    className="text-gray-500 hover:text-[#5247bf] transition-colors"
+                                    title="Copy Content"
+                                  >
+                                    <Copy className="w-4 h-4" />
+                                  </button>
+                                </div>
+                                {copyFeedback[`${item.Day}-content`] && (
+                                  <span className="absolute top-0 right-0 mt-1 mr-1 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                                    Copied!
+                                  </span>
+                                )}
                               </td>
-                              <td className="p-3 text-gray-800">
-                                {item.bestPostingTime}
+                              <td className="p-3 text-gray-800 relative group">
+                                <div className="flex items-center space-x-2">
+                                  <span>{item.imagePrompt || "-"}</span>
+                                  {item.imagePrompt && (
+                                    <button
+                                      onClick={() =>
+                                        handleCopy(
+                                          item.imagePrompt,
+                                          item.Day,
+                                          "imagePrompt"
+                                        )
+                                      }
+                                      className="text-gray-500 hover:text-[#5247bf] transition-colors"
+                                      title="Copy Image Prompt"
+                                    >
+                                      <Copy className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+                                {copyFeedback[`${item.Day}-imagePrompt`] && (
+                                  <span className="absolute top-0 right-0 mt-1 mr-1 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                                    Copied!
+                                  </span>
+                                )}
                               </td>
-                              <td className="p-3 text-gray-800">
-                                {item.content}
-                              </td>
-                              <td className="p-3 text-gray-800">
-                                {item.imagePrompt || "-"}
-                              </td>
-                              <td className="p-3 text-gray-800">
-                                {item.videoPrompt || "-"}
+                              <td className="p-3 text-gray-800 relative group">
+                                <div className="flex items-center space-x-2">
+                                  <span>{item.videoPrompt || "-"}</span>
+                                  {item.videoPrompt && (
+                                    <button
+                                      onClick={() =>
+                                        handleCopy(
+                                          item.videoPrompt,
+                                          item.Day,
+                                          "videoPrompt"
+                                        )
+                                      }
+                                      className="text-gray-500 hover:text-[#5247bf] transition-colors"
+                                      title="Copy Video Prompt"
+                                    >
+                                      <Copy className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+                                {copyFeedback[`${item.Day}-videoPrompt`] && (
+                                  <span className="absolute top-0 right-0 mt-1 mr-1 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                                    Copied!
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -311,7 +398,7 @@ const ContentPlan = () => {
                         <span>Download</span>
                       </button>
                       <button
-                        onClick={() => handleDeletePlan(plan.id)}
+                        onClick={() => handleDeletePlan(plan.id, plan.name)}
                         className="flex-1 bg-red-100 text-red-800 p-2 rounded-lg hover:bg-red-200 transition-all duration-200 flex items-center justify-center space-x-2"
                       >
                         <Trash2 className="w-4 h-4" />

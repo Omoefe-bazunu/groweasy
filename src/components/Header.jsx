@@ -30,42 +30,43 @@ const TopNav = () => {
     <nav className="bg-white shadow-md px-12 flex justify-between items-center sticky top-0 z-50 max-w-2xl mx-auto left-0 right-0 rounded-b-xl py-2">
       {/* Brand Logo */}
       <div className="flex items-center">
-        <img
+        {/* <img
           src="/gelogo.png"
           alt="Brand Logo"
           className="h-10 w-auto"
           onError={(e) =>
             (e.target.src = "https://via.placeholder.com/150x50?text=Logo")
           }
-        />
+        /> */}
+        <h1 className="text-[#5247bf] font-bold text-2xl">GrowEasy</h1>
       </div>
 
       {/* Navigation Icons */}
       <div className="flex space-x-6 items-center">
         <button
           onClick={handleContactClick}
-          className="text-gray-500 hover:text-[#5247bf] transition-all duration-200 cursor-pointer"
+          className="hover:text-gray-500 text-[#5247bf] transition-all duration-200 cursor-pointer"
           title="Contact"
         >
           <MdContactPage className="w-6 h-6" />
         </button>
         <button
           onClick={handleAboutClick}
-          className="text-gray-500 hover:text-[#5247bf] transition-all duration-200 cursor-pointer"
+          className="hover:text-gray-500 text-[#5247bf] transition-all duration-200 cursor-pointer"
           title="About"
         >
           <Info className="w-6 h-6" />
         </button>
         <button
           onClick={handleTestimonialsClick}
-          className="text-gray-500 hover:text-[#5247bf] transition-all duration-200 cursor-pointer"
+          className="hover:text-gray-500 text-[#5247bf] transition-all duration-200 cursor-pointer"
           title="Testimonials"
         >
           <FaStar className="w-6 h-6" />
         </button>
         <button
           onClick={toggleCreateOptions}
-          className="text-gray-500 hover:text-[#5247bf] transition-all duration-200 cursor-pointer"
+          className="hover:text-gray-500 text-[#5247bf] transition-all duration-200 cursor-pointer"
           title="Create"
         >
           <IoCreate className="w-6 h-6" />
