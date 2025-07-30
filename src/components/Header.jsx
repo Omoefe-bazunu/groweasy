@@ -27,7 +27,7 @@ const TopNav = () => {
   };
 
   return (
-    <nav className="bg-white shadow-md px-12 flex justify-between items-center sticky top-0 z-50 max-w-2xl mx-auto left-0 right-0 rounded-b-xl py-2">
+    <nav className="bg-white shadow-md px-6 lg:px-12 flex justify-between items-center sticky top-0 z-50 max-w-2xl mx-auto left-0 right-0 rounded-b-xl py-2">
       {/* Brand Logo */}
       <div className="flex items-center">
         {/* <img
@@ -38,7 +38,7 @@ const TopNav = () => {
             (e.target.src = "https://via.placeholder.com/150x50?text=Logo")
           }
         /> */}
-        <h1 className="text-[#5247bf] font-bold text-2xl">GrowEasy</h1>
+        <h1 className="text-[#5247bf] font-bold text-xl">G.Easy</h1>
       </div>
 
       {/* Navigation Icons */}

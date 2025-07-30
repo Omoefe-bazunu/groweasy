@@ -112,8 +112,13 @@ const Documents = () => {
       <h1 className="text-3xl font-extrabold text-[#5247bf] mb-2 text-center">
         Important Documents
       </h1>
+      <p className="text-sm text-gray-600 mb-2 w-full text-center">
+        Below is a list of important documents you need to have for your
+        business.
+      </p>
+
       <p className="text-xs text-gray-600 mb-6 w-full text-center">
-        Tap on each item to see details
+        - Tap on each item to see details -
       </p>
       <div className="max-w-2xl mx-auto h-[calc(100vh-12rem)] overflow-y-auto">
         <div className="space-y-4">
