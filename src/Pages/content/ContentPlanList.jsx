@@ -242,9 +242,6 @@ const ContentPlanList = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Image Prompt
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Video Prompt
-                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -258,9 +255,6 @@ const ContentPlanList = () => {
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {item.imagePrompt || "-"}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {item.videoPrompt || "-"}
                           </td>
                         </tr>
                       ))}

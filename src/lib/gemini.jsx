@@ -39,11 +39,14 @@ const callGeminiAPI = async (prompt) => {
 
     try {
       return JSON.parse(cleanedText);
-    } catch (parseError) {
-      // If parsing fails, try to extract JSON from the response
+    } catch (error) {
+      // Fallback: Try to extract JSON from the response
       const match = cleanedText.match(/\[\s*{[\s\S]*?}\s*\]/);
-      if (match) return JSON.parse(match[0]);
-      throw new Error("Failed to parse API response");
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+      console.error("Failed to parse API response:", error, cleanedText);
+      throw new Error("Failed to parse API response as JSON");
     }
   } catch (error) {
     console.error("Gemini API error:", error);
@@ -76,34 +79,7 @@ export const generateContentStrategy = async (formData) => {
   Return only the JSON object with no additional text or markdown.
   `;
 
-  const strategy = await callGeminiAPI(prompt);
-  return strategy;
-};
-
-// Branding Package Generator
-export const generateBrandingPackage = async (formData) => {
-  const prompt = `
-  Create a complete branding package based on the following details.
-  Return a JSON object with these keys: brandDescription, logoConcepts, colorPalette, 
-  typography, imageryStyle, brandVoice, taglineOptions, applicationExamples.
-  
-  Details:
-  - Brand Name: ${formData.brandName}
-  - Industry: ${formData.industry}
-  - Target Audience: ${formData.targetAudience}
-  - Brand Values: ${formData.brandValues || "Not specified"}
-  - Competitors: ${formData.competitors || "Not specified"}
-  - Color Preferences: ${formData.colorPreferences || "None"}
-  - Style Preferences: ${formData.stylePreferences || "None"}
-  - Existing Assets: ${formData.existingAssets || "None"}
-
-  Provide detailed, creative, and professional branding recommendations.
-  For colorPalette, provide hex codes. For typography, suggest specific fonts.
-  Return only the JSON object with no additional text or markdown.
-  `;
-
-  const packageData = await callGeminiAPI(prompt);
-  return packageData;
+  return await callGeminiAPI(prompt);
 };
 
 // Blog Post Generator
@@ -122,19 +98,18 @@ export const generateBlogPost = async (formData) => {
   - Keywords: ${formData.keywords || "None"}
 
   The post should be well-structured with headings, subheadings, and paragraphs.
-  Include at least 5 relevant hashtags. Make the content original and engaging.
+  Include at least 5 relevant hashtags. Make the content original, fresh, and engaging.
   Return only the JSON object with no additional text or markdown.
   `;
 
-  const blogPost = await callGeminiAPI(prompt);
-  return blogPost;
+  return await callGeminiAPI(prompt);
 };
 
 // Content Repurposer
 export const repurposeContent = async (originalContent, platform) => {
   const platformInstructions = {
     twitter:
-      "Convert this into a concise, engaging tweet (max 280 chars). Include relevant hashtags and a call-to-action.",
+      "Convert this into a concise, engaging tweet with 4 threads separated by a line spacing and a subheading (max 280 chars). Include relevant hashtags and a call-to-action.",
     linkedin:
       "Repurpose this into a professional LinkedIn post (max 1300 chars). Use a more formal tone and include relevant hashtags.",
     instagram:
@@ -155,8 +130,7 @@ export const repurposeContent = async (originalContent, platform) => {
   Return only the repurposed content as a plain text string with no additional formatting or explanations.
   `;
 
-  const repurposedContent = await callGeminiAPI(prompt);
-  return repurposedContent;
+  return await callGeminiAPI(prompt);
 };
 
 export const generateContentPlan = async (formData) => {
@@ -213,8 +187,7 @@ Format:
   {
     "Day": 1,
     "content": "A detailed description of the post",
-    "imagePrompt": "A prompt for generating an image (if applicable)",
-    "videoPrompt": "A prompt for generating a video (if applicable)"
+    "imagePrompt": "A prompt for generating an image (if applicable)"
   },
   {...},
   {...}
@@ -237,7 +210,7 @@ Generate exactly ${
       postDays.length
     } posts, scheduling them on the following days: ${postDays.join(
       ", "
-    )}. Include imagePrompt and videoPrompt only if the content type includes "Social Media Campaigns" and let the image and video prompts be highly descriptive, unique, and directly related to the text content for uniformity and flow. Use the specified tone of voice and tailor the content to the pain points of the target audience and the social media goal(s). Provide complete, ready-to-post content that requires no editing for optimal results. Include a compelling CTA at the end and a minimum of 4 strong hashtag keywords. Each content piece should be a minimum of 35 words. Ensure all content is entirely original, created specifically for this request, and not based on any previously generated or existing material.
+    )}. Include imagePrompt only if the content type includes "Social Media Campaigns" and let the image prompt be highly descriptive, unique, and directly related to the text content for uniformity and flow. Use the specified tone of voice and tailor the content to the pain points of the target audience and the social media goal(s). Provide complete, ready-to-post content that requires no editing for optimal results. Include a compelling CTA at the end and a minimum of 4 strong hashtag keywords. Each content piece should be a minimum of 35 words. Ensure all content is entirely original, created specifically for this request, and not based on any previously generated or existing material.
 
 **Output only the JSON array, nothing else. No markdown, no \`\`\`json, no extra text.**
 `;
@@ -279,18 +252,22 @@ Generate exactly ${
 
     // Preprocess the response to remove markdown code blocks
     let cleanedText = text.trim();
-    cleanedText = cleanedText.replace(/```json\n?/, "").replace(/```\n?/, "");
-    cleanedText = cleanedText.trim();
-
+    cleanedText = cleanedText
+      .replace(/```json\n?/, "")
+      .replace(/```\n?/, "")
+      .trim();
     console.log("Cleaned text after removing markdown:", cleanedText);
 
     // Attempt to parse the response as JSON
     let jsonArray;
     try {
       jsonArray = JSON.parse(cleanedText);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini API response as JSON:", parseError);
-      console.error("Cleaned response text:", cleanedText);
+    } catch (error) {
+      console.error(
+        "Failed to parse Gemini API response as JSON:",
+        error,
+        cleanedText
+      );
 
       // Fallback: Attempt to extract JSON array using regex
       const match = cleanedText.match(/\[\s*{[\s\S]*?}\s*\]/);
@@ -300,11 +277,8 @@ Generate exactly ${
 
       try {
         jsonArray = JSON.parse(match[0]);
-      } catch (secondParseError) {
-        console.error(
-          "Failed to parse extracted JSON array:",
-          secondParseError
-        );
+      } catch (secondError) {
+        console.error("Failed to parse extracted JSON array:", secondError);
         throw new Error("Invalid JSON array in Gemini API response");
       }
     }
@@ -320,14 +294,12 @@ Generate exactly ${
       console.warn(
         `Expected ${postDays.length} posts, but received ${jsonArray.length}. Adjusting...`
       );
-      // Truncate or pad the array as needed
       jsonArray = jsonArray.slice(0, postDays.length);
       while (jsonArray.length < postDays.length) {
         jsonArray.push({
           Day: postDays[jsonArray.length],
           content: "Default content (placeholder)",
           imagePrompt: "",
-          videoPrompt: "",
         });
       }
     }
@@ -337,7 +309,6 @@ Generate exactly ${
       Day: item.Day || postDays[index],
       content: item.content || "Default content",
       imagePrompt: item.imagePrompt || "",
-      videoPrompt: item.videoPrompt || "",
     }));
 
     console.log("Validated content plan:", validatedArray);
