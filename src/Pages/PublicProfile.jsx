@@ -123,7 +123,7 @@ const PublicProfile = () => {
               <h2 className="text-3xl text-center font-bold text-gray-900 mb-4">
                 About Us
               </h2>
-              <p className="text-gray-600 leading-relaxed">
+              <p className="text-gray-600 text-center leading-relaxed">
                 {profile.description}
               </p>
             </div>
@@ -186,10 +186,10 @@ const PublicProfile = () => {
                     key={index}
                     className="bg-white p-6 flex flex-col rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300"
                   >
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    <h3 className="text-xl text-center font-semibold text-gray-900 mb-2">
                       {item.title}
                     </h3>
-                    <p className="text-gray-600 mb-4 line-clamp-2 flex-grow">
+                    <p className="text-gray-600 text-center mb-4 line-clamp-2 flex-grow">
                       {item.description}
                     </p>
                     {Array.isArray(item.images) && item.images.length > 0 && (
@@ -253,7 +253,10 @@ const PublicProfile = () => {
             Get in touch today to discuss how we can help your business grow!
           </p>
           <a
-            href="https://wa.me/1234567890"
+            href={`https://wa.me/${profile.contactNumber.replace(
+              /\D/g,
+              ""
+            )}?text=Hi`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center bg-white text-[#5247bf] px-8 py-3 rounded-full hover:bg-gray-100 transition-all duration-300 text-lg font-semibold"

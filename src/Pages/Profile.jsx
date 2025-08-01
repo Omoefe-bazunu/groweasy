@@ -117,10 +117,10 @@ const Profile = () => {
       required: true,
     },
     {
-      label: "Contact Number (with Country Code)",
+      label: "Contact Number (Preferably WhatsApp)",
       field: "contactNumber",
       type: "tel",
-      placeholder: "e.g., +1 123-456-7890",
+      placeholder: "e.g., +2349043970401",
       required: true,
     },
     {
@@ -485,14 +485,14 @@ const Profile = () => {
                 <img
                   src={profile.logoImage}
                   alt="Business Logo"
-                  className="w-40 h-40 border-4 border-white object-cover rounded-full"
+                  className="w-40 h-40 border-4 border-white object-cover rounded-full shadow-lg"
                 />
               )}
               <div>
                 <h2 className="text-3xl text-center font-bold text-gray-900 mb-4">
                   About Us
                 </h2>
-                <p className="text-gray-600 leading-relaxed">
+                <p className="text-gray-600 leading-relaxed text-center">
                   {profile.description}
                 </p>
               </div>
@@ -555,10 +555,10 @@ const Profile = () => {
                       key={index}
                       className="bg-white p-6 flex flex-col rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300"
                     >
-                      <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                      <h3 className="text-xl text-center font-semibold text-gray-900 mb-2">
                         {item.title}
                       </h3>
-                      <p className="text-gray-600 flex-grow mb-4 line-clamp-2">
+                      <p className="text-gray-600 text-center flex-grow mb-4 line-clamp-2">
                         {item.description}
                       </p>
                       {Array.isArray(item.images) && item.images.length > 0 && (
@@ -617,12 +617,12 @@ const Profile = () => {
 
           {/* CTA Section */}
           <section className="text-center py-12 bg-[#5247bf] text-white rounded-lg">
-            <h2 className="text-3xl font-bold mb-4">Ready to Work With Us?</h2>
-            <p className="text-lg mb-6 max-w-xl mx-auto">
+            <h2 className="text-2xl font-bold mb-4">Ready to Work With Us?</h2>
+            <p className=" mb-6 max-w-xl mx-auto">
               Get in touch today to discuss how we can help your business grow!
             </p>
             <a
-              href="https://wa.me/1234567890"
+              href={`https://wa.me/${profile.contactNumber}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center bg-white text-[#5247bf] px-8 py-3 rounded-full hover:bg-gray-100 transition-all duration-300 text-lg font-semibold"

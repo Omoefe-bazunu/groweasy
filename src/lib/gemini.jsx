@@ -2,6 +2,163 @@ const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/
   import.meta.env.VITE_APP_GEMINI_API_KEY
 }`;
 
+// Helper function to make API calls
+const callGeminiAPI = async (prompt) => {
+  try {
+    const response = await fetch(GEMINI_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API request failed: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("No content received from API");
+
+    // Clean and parse the response
+    let cleanedText = text.trim();
+    cleanedText = cleanedText
+      .replace(/```json\n?/, "")
+      .replace(/```\n?/, "")
+      .trim();
+
+    try {
+      return JSON.parse(cleanedText);
+    } catch (parseError) {
+      // If parsing fails, try to extract JSON from the response
+      const match = cleanedText.match(/\[\s*{[\s\S]*?}\s*\]/);
+      if (match) return JSON.parse(match[0]);
+      throw new Error("Failed to parse API response");
+    }
+  } catch (error) {
+    console.error("Gemini API error:", error);
+    throw error;
+  }
+};
+
+// Content Strategy Generator
+export const generateContentStrategy = async (formData) => {
+  const prompt = `
+  Create a comprehensive content strategy based on the following details. 
+  Return a JSON object with these keys: overview, goals, targetAudience, contentTypes, 
+  toneGuidelines, contentCalendar, distributionChannels, metrics.
+  
+  Details:
+  - Brand Name: ${formData.brandName}
+  - Industry: ${formData.industry || "Not specified"}
+  - Business Goals: ${formData.businessGoals}
+  - Target Audience: ${formData.targetAudience}
+  - Competitors: ${formData.competitors || "Not specified"}
+  - Unique Value Proposition: ${
+    formData.uniqueValueProposition || "Not specified"
+  }
+  - Content Types: ${formData.contentTypes.join(", ") || "Not specified"}
+  - Tone of Voice: ${formData.toneOfVoice}
+  - Key Messages: ${formData.keyMessages || "Not specified"}
+  - Success Metrics: ${formData.metrics || "Not specified"}
+
+  Make the strategy detailed, actionable, and tailored to the brand's needs.
+  Return only the JSON object with no additional text or markdown.
+  `;
+
+  const strategy = await callGeminiAPI(prompt);
+  return strategy;
+};
+
+// Branding Package Generator
+export const generateBrandingPackage = async (formData) => {
+  const prompt = `
+  Create a complete branding package based on the following details.
+  Return a JSON object with these keys: brandDescription, logoConcepts, colorPalette, 
+  typography, imageryStyle, brandVoice, taglineOptions, applicationExamples.
+  
+  Details:
+  - Brand Name: ${formData.brandName}
+  - Industry: ${formData.industry}
+  - Target Audience: ${formData.targetAudience}
+  - Brand Values: ${formData.brandValues || "Not specified"}
+  - Competitors: ${formData.competitors || "Not specified"}
+  - Color Preferences: ${formData.colorPreferences || "None"}
+  - Style Preferences: ${formData.stylePreferences || "None"}
+  - Existing Assets: ${formData.existingAssets || "None"}
+
+  Provide detailed, creative, and professional branding recommendations.
+  For colorPalette, provide hex codes. For typography, suggest specific fonts.
+  Return only the JSON object with no additional text or markdown.
+  `;
+
+  const packageData = await callGeminiAPI(prompt);
+  return packageData;
+};
+
+// Blog Post Generator
+export const generateBlogPost = async (formData) => {
+  const prompt = `
+  Write a comprehensive blog post based on the following details.
+  Return a JSON object with these keys: title, slug, excerpt, contentBody, hashtags.
+  
+  Requirements:
+  - Topic: ${formData.topic}
+  - Description: ${formData.description || "Not specified"}
+  - Category: ${formData.category || "General"}
+  - Region: ${formData.region || "Global"}
+  - Tone: ${formData.tone}
+  - Length: ${formData.length}
+  - Keywords: ${formData.keywords || "None"}
+
+  The post should be well-structured with headings, subheadings, and paragraphs.
+  Include at least 5 relevant hashtags. Make the content original and engaging.
+  Return only the JSON object with no additional text or markdown.
+  `;
+
+  const blogPost = await callGeminiAPI(prompt);
+  return blogPost;
+};
+
+// Content Repurposer
+export const repurposeContent = async (originalContent, platform) => {
+  const platformInstructions = {
+    twitter:
+      "Convert this into a concise, engaging tweet (max 280 chars). Include relevant hashtags and a call-to-action.",
+    linkedin:
+      "Repurpose this into a professional LinkedIn post (max 1300 chars). Use a more formal tone and include relevant hashtags.",
+    instagram:
+      "Adapt this for an Instagram caption (max 2200 chars). Make it engaging and include relevant hashtags and emojis.",
+    facebook:
+      "Repurpose this for a Facebook post (max 63206 chars). Make it conversational and engaging.",
+    whatsapp:
+      "Convert this into a concise WhatsApp message (max 65536 chars). Keep it simple and direct.",
+  };
+
+  const prompt = `
+  Repurpose the following content for ${platform}:
+  ${platformInstructions[platform]}
+  
+  Original Content:
+  ${originalContent}
+
+  Return only the repurposed content as a plain text string with no additional formatting or explanations.
+  `;
+
+  const repurposedContent = await callGeminiAPI(prompt);
+  return repurposedContent;
+};
+
 export const generateContentPlan = async (formData) => {
   try {
     // Validate API key

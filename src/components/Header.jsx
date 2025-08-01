@@ -44,6 +44,13 @@ const TopNav = () => {
       {/* Navigation Icons */}
       <div className="flex space-x-6 items-center">
         <button
+          onClick={toggleCreateOptions}
+          className="hover:text-gray-500 text-[#5247bf] transition-all duration-200 cursor-pointer"
+          title="Create"
+        >
+          <IoCreate className="w-6 h-6" />
+        </button>
+        <button
           onClick={handleContactClick}
           className="hover:text-gray-500 text-[#5247bf] transition-all duration-200 cursor-pointer"
           title="Contact"
@@ -63,13 +70,6 @@ const TopNav = () => {
           title="Testimonials"
         >
           <FaStar className="w-6 h-6" />
-        </button>
-        <button
-          onClick={toggleCreateOptions}
-          className="hover:text-gray-500 text-[#5247bf] transition-all duration-200 cursor-pointer"
-          title="Create"
-        >
-          <IoCreate className="w-6 h-6" />
         </button>
       </div>
 

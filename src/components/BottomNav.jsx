@@ -10,8 +10,8 @@ const BottomNav = () => {
   const navItems = [
     { path: "/dashboard", label: "Home", icon: <Home className="w-5 h-5" /> },
     {
-      path: "/content-plan",
-      label: "Plan",
+      path: "/content-creation-board",
+      label: "Creations",
       icon: <FileText className="w-5 h-5" />,
     },
     { path: "/profile", label: "Profile", icon: <User className="w-5 h-5" /> },

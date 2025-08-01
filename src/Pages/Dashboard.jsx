@@ -60,7 +60,7 @@ const Dashboard = () => {
     fetchDownlines();
   }, [user]);
 
-  const handleCreateContentPlan = () => navigate("/content-creation-board");
+  const handleCreations = () => navigate("/content-creation-board");
   const handleBusinessProfile = () => navigate("/profile");
   const handleViewDocuments = () => navigate("/documents");
   const handleManageSubscription = () => navigate("/subscribe");
@@ -217,17 +217,17 @@ const Dashboard = () => {
         </div>
 
         <div
-          onClick={handleCreateContentPlan}
+          onClick={handleCreations}
           className="bg-white rounded-xl shadow-lg p-6 flex items-center space-x-4 hover:bg-purple-50 hover:shadow-xl transition-all duration-300 cursor-pointer"
         >
           <FileText className="w-8 h-8 text-[#5247bf]" />
           <div className="flex-1">
             <h2 className="text-sm lg:text-xl font-semibold text-gray-800">
-              Create Content Plan
+              View your Creations
             </h2>
           </div>
           <button className="bg-[#5247bf] w-24 text-white px-4 py-2 rounded-lg hover:bg-[#4238a6]">
-            Create
+            View
           </button>
         </div>
 

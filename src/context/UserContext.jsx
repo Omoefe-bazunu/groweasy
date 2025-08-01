@@ -14,6 +14,8 @@ import {
   onSnapshot,
   serverTimestamp,
   getDoc,
+  updateDoc,
+  increment,
 } from "firebase/firestore";
 
 const UserContext = createContext();
@@ -37,7 +39,7 @@ export function UserProvider({ children }) {
     return () => unsubscribeAuth();
   }, []);
 
-  // Listen to user data only when user is authenticated
+  // Listen to user data when authenticated
   useEffect(() => {
     if (!user) return;
 
@@ -60,61 +62,6 @@ export function UserProvider({ children }) {
 
     return () => unsubscribeSnapshot();
   }, [user]);
-
-  // const signupWithEmail = async (name, email, password, phoneNumber) => {
-  //   try {
-  //     const userCredential = await createUserWithEmailAndPassword(
-  //       auth,
-  //       email,
-  //       password
-  //     );
-  //     const newUser = userCredential.user;
-
-  //     // Send email verification
-  //     await sendEmailVerification(newUser);
-
-  //     // Update the user's display name
-  //     await updateProfile(newUser, { displayName: name });
-
-  //     // Create a user document in Firestore
-  //     const userDocRef = doc(db, "users", newUser.uid);
-  //     const userDocData = {
-  //       name,
-  //       email,
-  //       phoneNumber,
-  //       createdAt: new Date().toISOString(),
-  //       subscription: {
-  //         plan: "Free",
-  //         status: "active",
-  //         startDate: serverTimestamp(),
-  //         imageAttempts: 0,
-  //         contentPlanAttempts: 0,
-  //         videoAttempts: 0,
-  //       },
-  //     };
-  //     await setDoc(userDocRef, userDocData);
-
-  //     // Wait for the document to be created before proceeding
-  //     await new Promise((resolve, reject) => {
-  //       const checkDoc = async () => {
-  //         const docSnap = await getDoc(userDocRef);
-  //         if (docSnap.exists()) {
-  //           resolve();
-  //         } else {
-  //           setTimeout(checkDoc, 500); // Retry after 500ms
-  //         }
-  //       };
-  //       checkDoc().catch(reject);
-  //     });
-
-  //     // Manually set userData to avoid waiting for the snapshot listener
-  //     setUserData({ id: userDocRef.id, ...userDocData });
-  //     setUser(newUser);
-  //     return newUser;
-  //   } catch (err) {
-  //     throw new Error("Failed to sign up: " + err.message);
-  //   }
-  // };
 
   const signupWithEmail = async (
     name,
@@ -139,32 +86,40 @@ export function UserProvider({ children }) {
         name,
         email,
         phoneNumber,
-        referredBy: referrerId, // 👈 Add referrerId here
+        referredBy: referrerId,
         earnings: 0,
         downlineEarnings: 0,
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
         subscription: {
           plan: "Free",
           status: "active",
           startDate: serverTimestamp(),
-          imageAttempts: 0,
-          contentPlanAttempts: 0,
-          videoAttempts: 0,
+          contentPlans: 0,
+          contentStrategies: 0,
+          blogPosts: 0,
+          imageGenerations: 0,
+          month: new Date().toISOString().slice(0, 7), // YYYY-MM format
         },
       };
 
       await setDoc(userDocRef, userDocData);
 
-      await new Promise((resolve, reject) => {
+      // Update referrer's downline if applicable
+      if (referrerId) {
+        const referrerRef = doc(db, "users", referrerId);
+        await updateDoc(referrerRef, {
+          referrals: increment(1),
+        });
+      }
+
+      // Wait for document creation
+      await new Promise((resolve) => {
         const checkDoc = async () => {
           const docSnap = await getDoc(userDocRef);
-          if (docSnap.exists()) {
-            resolve();
-          } else {
-            setTimeout(checkDoc, 500);
-          }
+          if (docSnap.exists()) resolve();
+          else setTimeout(checkDoc, 500);
         };
-        checkDoc().catch(reject);
+        checkDoc();
       });
 
       setUserData({ id: userDocRef.id, ...userDocData });
@@ -184,7 +139,6 @@ export function UserProvider({ children }) {
       );
       const loggedInUser = userCredential.user;
 
-      // Check if email is verified
       if (!loggedInUser.emailVerified) {
         await signOut(auth);
         throw new Error(
@@ -192,10 +146,40 @@ export function UserProvider({ children }) {
         );
       }
 
+      // Check if we need to reset monthly usage counters
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const userDoc = await getDoc(doc(db, "users", loggedInUser.uid));
+
+      if (
+        userDoc.exists() &&
+        userDoc.data().subscription.month !== currentMonth
+      ) {
+        await updateDoc(doc(db, "users", loggedInUser.uid), {
+          "subscription.contentPlans": 0,
+          "subscription.contentStrategies": 0,
+          "subscription.blogPosts": 0,
+          "subscription.imageGenerations": 0,
+          "subscription.month": currentMonth,
+        });
+      }
+
       setUser(loggedInUser);
       return loggedInUser;
     } catch (err) {
       throw new Error(err.message);
+    }
+  };
+
+  const incrementUsage = async (type) => {
+    if (!user) return;
+
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      await updateDoc(userDocRef, {
+        [`subscription.${type}`]: increment(1),
+      });
+    } catch (err) {
+      console.error("Failed to increment usage counter:", err);
     }
   };
 
@@ -228,6 +212,7 @@ export function UserProvider({ children }) {
         signupWithEmail,
         sendPasswordReset,
         logout,
+        incrementUsage,
         loading,
         error,
       }}
