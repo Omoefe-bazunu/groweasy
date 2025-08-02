@@ -20,7 +20,7 @@ import AdminDashboard from "./Pages/AdminDashboard";
 
 // Content Management
 import ContentPlanList from "./Pages/content/ContentPlanList";
-import ContentPlanGenerator from "./pages/content/ContentPlanGenerator";
+import ContentPlanGenerator from "./Pages/content/ContentPlanGenerator";
 import ContentStrategyList from "./Pages/content/ContentStrategyList";
 import ContentStrategyGenerator from "./pages/content/ContentStrategyGenerator";
 import BlogPostList from "./Pages/content/BlogPostList";
