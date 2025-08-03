@@ -107,10 +107,12 @@ const BlogPostList = () => {
   return (
     <div className="min-h-screen max-w-2xl mx-auto h-[calc(100vh-12rem)] overflow-y-auto p-6 pb-32">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-[#5247bf]">Your Blog Posts</h1>
+        <h1 className="text-sm lg:text-2xl font-bold text-[#5247bf]">
+          Your Blog Posts
+        </h1>
         <button
           onClick={() => navigate("/blog-posts/new")}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+          className="bg-indigo-600 text-xs lg:text-sm text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
         >
           Create New Post
         </button>
