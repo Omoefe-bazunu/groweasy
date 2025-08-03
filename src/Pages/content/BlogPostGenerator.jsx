@@ -12,11 +12,10 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { generateBlogPost } from "../../lib/gemini";
-import { Download, Save, Copy, ChevronDown, ChevronUp } from "lucide-react";
-import { jsPDF } from "jspdf";
+import { Save, Copy, ChevronDown, ChevronUp } from "lucide-react";
 
 const BlogPostGenerator = () => {
-  const { user } = useUser();
+  const { user, userData, incrementUsage } = useUser();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     topic: "",
@@ -33,7 +32,6 @@ const BlogPostGenerator = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [expandedSections, setExpandedSections] = useState({});
-  const [subscription, setSubscription] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -44,23 +42,20 @@ const BlogPostGenerator = () => {
           const userData = userDoc.data();
           const subData = userData.subscription || {};
           const now = new Date();
-          const startDate = subData.startDate?.toDate();
-          if (!startDate || now - startDate > 30 * 24 * 60 * 60 * 1000) {
+          const currentMonth = now.toISOString().slice(0, 7);
+          if (subData.month !== currentMonth) {
             await updateDoc(userDocRef, {
               subscription: {
                 ...subData,
-                contentPlanAttempts: 0,
-                blogPostAttempts: 0,
-                contentStrategyAttempts: 0,
+                contentPlans: 0,
+                contentStrategies: 0,
+                blogPosts: 0,
+                imageGenerations: 0,
+                month: currentMonth,
                 startDate: serverTimestamp(),
               },
             });
-            subData.contentPlanAttempts = 0;
-            subData.blogPostAttempts = 0;
-            subData.contentStrategyAttempts = 0;
-            subData.startDate = new Date();
           }
-          setSubscription(subData);
         }
       }
     });
@@ -69,31 +64,18 @@ const BlogPostGenerator = () => {
 
   const checkBlogPostLimit = () => {
     if (!user) return "Please sign in to generate a blog post.";
-    if (!subscription) return "Loading subscription data...";
+    if (!userData?.subscription) return "Loading subscription data...";
 
-    const { plan, blogPostAttempts } = subscription;
+    const { plan, blogPosts } = userData.subscription;
     let maxPosts;
     if (plan === "Free") maxPosts = 3;
     else if (plan === "Growth") maxPosts = 10;
     else if (plan === "Enterprise") maxPosts = 30;
 
-    if (blogPostAttempts >= maxPosts) {
+    if (blogPosts >= maxPosts) {
       return `You have reached the limit of ${maxPosts} blog post creations this month. Upgrade your plan to continue.`;
     }
     return null;
-  };
-
-  const incrementBlogPostAttempts = async () => {
-    if (!user || !subscription) return;
-
-    const userDocRef = doc(db, "users", user.uid);
-    await updateDoc(userDocRef, {
-      "subscription.blogPostAttempts": subscription.blogPostAttempts + 1,
-    });
-    setSubscription((prev) => ({
-      ...prev,
-      blogPostAttempts: prev.blogPostAttempts + 1,
-    }));
   };
 
   const categoryOptions = [
@@ -152,9 +134,9 @@ const BlogPostGenerator = () => {
     setError("");
     try {
       const generatedPost = await generateBlogPost(formData);
+      await incrementUsage("blogPosts");
       setBlogPost(generatedPost);
       setPostTitle(generatedPost.title || formData.topic);
-      await incrementBlogPostAttempts();
     } catch (err) {
       setError("Failed to generate blog post: " + err.message);
       console.error(err);
@@ -195,90 +177,6 @@ const BlogPostGenerator = () => {
     }
   };
 
-  const handleDownloadPDF = () => {
-    if (!blogPost) return;
-
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.height;
-    const margin = 10;
-    let yPosition = margin;
-
-    const addText = (text, x, y, options = {}) => {
-      const maxWidth = options.maxWidth || 190;
-      const lineHeight = options.lineHeight || 5;
-
-      const lines = doc.splitTextToSize(text, maxWidth);
-      const requiredHeight = lines.length * lineHeight;
-
-      if (y + requiredHeight > pageHeight - margin) {
-        doc.addPage();
-        yPosition = margin;
-      }
-
-      doc.text(lines, x, yPosition, options);
-      yPosition += requiredHeight;
-    };
-
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    addText(postTitle, margin, yPosition);
-    yPosition += 10;
-
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    addText(`Topic: ${formData.topic}`, margin, yPosition);
-    yPosition += 5;
-    addText(
-      `Generated on: ${new Date().toLocaleDateString()}`,
-      margin,
-      yPosition
-    );
-    yPosition += 10;
-
-    if (blogPost.excerpt) {
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      addText("Excerpt", margin, yPosition);
-      yPosition += 7;
-
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      addText(blogPost.excerpt, margin, yPosition, {
-        maxWidth: 190,
-        lineHeight: 5,
-      });
-      yPosition += (blogPost.excerpt.split(" ").length / 10) * 5 + 10;
-    }
-
-    if (blogPost.contentBody) {
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      addText("Content", margin, yPosition);
-      yPosition += 7;
-
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      addText(blogPost.contentBody, margin, yPosition, {
-        maxWidth: 190,
-        lineHeight: 5,
-      });
-      yPosition += (blogPost.contentBody.split(" ").length / 10) * 5 + 10;
-    }
-
-    if (blogPost.hashtags && blogPost.hashtags.length > 0) {
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      addText("Hashtags", margin, yPosition);
-      yPosition += 7;
-
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      addText(blogPost.hashtags.join(" "), margin, yPosition);
-    }
-
-    doc.save(`${postTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`);
-  };
-
   const handleCopy = (text) => {
     navigator.clipboard
       .writeText(text)
@@ -303,21 +201,21 @@ const BlogPostGenerator = () => {
         Blog Post Generator
       </h1>
 
-      {user && subscription && (
+      {user && userData?.subscription && (
         <div className="text-center text-gray-700 mb-4">
-          <p>Plan: {subscription.plan || "Free"}</p>
+          <p>Plan: {userData.subscription.plan || "Free"}</p>
           <p>
-            Blog Posts Created: {subscription.blogPostAttempts || 0}/
-            {subscription.plan === "Free"
+            Blog Posts Created: {userData.subscription.blogPosts || 0}/
+            {userData.subscription.plan === "Free"
               ? 3
-              : subscription.plan === "Growth"
+              : userData.subscription.plan === "Growth"
               ? 10
               : 30}
           </p>
-          {subscription.blogPostAttempts >=
-            (subscription.plan === "Free"
+          {userData.subscription.blogPosts >=
+            (userData.subscription.plan === "Free"
               ? 3
-              : subscription.plan === "Growth"
+              : userData.subscription.plan === "Growth"
               ? 10
               : 30) && (
             <p>
@@ -466,14 +364,6 @@ const BlogPostGenerator = () => {
             </h2>
             <div className="flex space-x-2">
               <button
-                onClick={handleDownloadPDF}
-                className="flex items-center space-x-1 bg-gray-200 text-gray-800 px-3 py-1 rounded-md hover:bg-gray-300"
-                title="Download as PDF"
-              >
-                <Download size={16} />
-                <span>PDF</span>
-              </button>
-              <button
                 onClick={() => setBlogPost(null)}
                 className="bg-gray-200 text-gray-800 px-3 py-1 rounded-md hover:bg-gray-300"
               >
@@ -487,15 +377,47 @@ const BlogPostGenerator = () => {
               type="text"
               value={postTitle}
               onChange={(e) => setPostTitle(e.target.value)}
-              className="w-full text-xl font-semibold mb-2 p-1 border-b border-gray-200 focus:border-indigo-500 focus:outline-none"
+              className="w-full text-xl text-[#5247bf] font-semibold mb-2 p-1 border-b border-gray-200 focus:border-indigo-500 focus:outline-none"
               placeholder="Post title"
             />
             <p className="text-sm text-gray-600 mb-4">
               {formData.topic} • {new Date().toLocaleDateString()}
             </p>
 
+            {/* Slug Section */}
+            <div className="mb-6 border-b border-gray-100 pb-4">
+              <div
+                className="flex justify-between items-center cursor-pointer"
+                onClick={() => toggleSection("slug")}
+              >
+                <h3 className="text-lg font-medium text-gray-800">Slug</h3>
+                {expandedSections["slug"] ? (
+                  <ChevronUp size={20} className="text-gray-600" />
+                ) : (
+                  <ChevronDown size={20} className="text-gray-600" />
+                )}
+              </div>
+              {expandedSections["slug"] && (
+                <div className="mt-2 relative">
+                  <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
+                    {blogPost.slug || "No slug available"}
+                  </div>
+                  {blogPost.slug && (
+                    <button
+                      onClick={() => handleCopy(blogPost.slug)}
+                      className="absolute top-0 right-0 text-gray-500 hover:text-indigo-600"
+                      title="Copy to clipboard"
+                    >
+                      <Copy size={16} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Other Sections (Excerpt, Content, Hashtags, etc.) */}
             {Object.entries(blogPost).map(([section, content]) => {
-              if (section === "slug") return null;
+              if (section === "slug" || section === "title") return null;
 
               return (
                 <div
@@ -512,9 +434,9 @@ const BlogPostGenerator = () => {
                         .replace(/^./, (str) => str.toUpperCase())}
                     </h3>
                     {expandedSections[section] ? (
-                      <ChevronUp />
+                      <ChevronUp size={20} className="text-gray-600" />
                     ) : (
-                      <ChevronDown />
+                      <ChevronDown size={20} className="text-gray-600" />
                     )}
                   </div>
 
@@ -538,7 +460,7 @@ const BlogPostGenerator = () => {
                           {content.map((item, index) => (
                             <span
                               key={index}
-                              className="bg-gray-100 px-2 py-1 rounded text-sm"
+                              className="bg-gray-500 px-2 py-1 rounded text-sm"
                             >
                               {item}
                             </span>

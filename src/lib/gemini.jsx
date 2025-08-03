@@ -4,6 +4,7 @@ const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/
 
 // Helper function to make API calls
 const callGeminiAPI = async (prompt) => {
+  const entropy = Math.random().toString(36).substring(2, 10); // unique ID
   try {
     const response = await fetch(GEMINI_API_URL, {
       method: "POST",
@@ -13,11 +14,17 @@ const callGeminiAPI = async (prompt) => {
           {
             parts: [
               {
-                text: prompt,
+                text: `${prompt}\n\nUniqueness Identifier: ${entropy}`,
               },
             ],
           },
         ],
+        generationConfig: {
+          temperature: 1.0,
+          topK: 40,
+          topP: 0.95,
+          candidateCount: 1,
+        },
       }),
     });
 
@@ -30,7 +37,6 @@ const callGeminiAPI = async (prompt) => {
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("No content received from API");
 
-    // Clean and parse the response
     let cleanedText = text.trim();
     cleanedText = cleanedText
       .replace(/```json\n?/, "")
@@ -40,12 +46,10 @@ const callGeminiAPI = async (prompt) => {
     try {
       return JSON.parse(cleanedText);
     } catch (error) {
-      // Fallback: Try to extract JSON from the response
       const match = cleanedText.match(/\[\s*{[\s\S]*?}\s*\]/);
       if (match) {
         return JSON.parse(match[0]);
       }
-      console.error("Failed to parse API response:", error, cleanedText);
       throw new Error("Failed to parse API response as JSON");
     }
   } catch (error) {
@@ -57,105 +61,134 @@ const callGeminiAPI = async (prompt) => {
 // Content Strategy Generator
 export const generateContentStrategy = async (formData) => {
   const prompt = `
-  Create a comprehensive content strategy based on the following details. 
-  Return a JSON object with these keys: overview, goals, targetAudience, contentTypes, 
-  toneGuidelines, contentCalendar, distributionChannels, metrics.
-  
-  Details:
-  - Brand Name: ${formData.brandName}
-  - Industry: ${formData.industry || "Not specified"}
-  - Business Goals: ${formData.businessGoals}
-  - Target Audience: ${formData.targetAudience}
-  - Competitors: ${formData.competitors || "Not specified"}
-  - Unique Value Proposition: ${
+Create a comprehensive content strategy based on the following details. 
+Return a JSON object with these keys: overview, goals, targetAudience, contentTypes, 
+toneGuidelines, contentCalendar, distributionChannels, metrics. 
+
+**The content must be entirely original, fresh, never-before-used, and unique to this request. Avoid repetition in structure, phrasing, or examples.**
+
+Details:
+- Brand Name: ${formData.brandName}
+- Industry: ${formData.industry || "Not specified"}
+- Business Goals: ${formData.businessGoals}
+- Target Audience: ${formData.targetAudience}
+- Competitors: ${formData.competitors || "Not specified"}
+- Unique Value Proposition: ${
     formData.uniqueValueProposition || "Not specified"
   }
-  - Content Types: ${formData.contentTypes.join(", ") || "Not specified"}
-  - Tone of Voice: ${formData.toneOfVoice}
-  - Key Messages: ${formData.keyMessages || "Not specified"}
-  - Success Metrics: ${formData.metrics || "Not specified"}
+- Content Types: ${formData.contentTypes.join(", ") || "Not specified"}
+- Tone of Voice: ${formData.toneOfVoice}
+- Key Messages: ${formData.keyMessages || "Not specified"}
+- Success Metrics: ${formData.metrics || "Not specified"}
 
-  Make the strategy detailed, actionable, and tailored to the brand's needs.
-  Return only the JSON object with no additional text or markdown.
-  `;
-
+Ensure the strategy is tailored and unique, with no reused elements. Return only the JSON object with no additional text or markdown.
+`;
   return await callGeminiAPI(prompt);
 };
 
 // Blog Post Generator
 export const generateBlogPost = async (formData) => {
   const prompt = `
-  Write a comprehensive blog post based on the following details.
-  Return a JSON object with these keys: title, slug, excerpt, contentBody, hashtags.
-  
-  Requirements:
-  - Topic: ${formData.topic}
-  - Description: ${formData.description || "Not specified"}
-  - Category: ${formData.category || "General"}
-  - Region: ${formData.region || "Global"}
-  - Tone: ${formData.tone}
-  - Length: ${formData.length}
-  - Keywords: ${formData.keywords || "None"}
+You are a content creation expert. Generate a comprehensive blog post based on the following details. The content must be entirely original, never-before-used, and freshly generated. Avoid using phrasing or examples that have been generated before or that resemble previous outputs.
 
-  The post should be well-structured with headings, subheadings, and paragraphs.
-  Include at least 5 relevant hashtags. Make the content original, fresh, and engaging.
-  Return only the JSON object with no additional text or markdown.
-  `;
+Return a JSON object with these keys: title, slug, excerpt, contentBody, hashtags.
 
-  return await callGeminiAPI(prompt);
+Requirements:
+- Topic: ${formData.topic}
+- Description: ${formData.description || "Not specified"}
+- Category: ${formData.category || "General"}
+- Region: ${formData.region || "Global"}
+- Tone: ${formData.tone}
+- Length: ${formData.length}
+- Keywords: ${formData.keywords || "None"}
+
+Additional Instructions:
+- Use clear structure: headings, subheadings, and at least 3 informative sections.
+- Include 5+ relevant hashtags aligned with the topic.
+- Generate a unique slug based on the topic (lowercase, hyphenated).
+- Excerpt should be a 100–250 character summary.
+- Include recent, credible insights where applicable.
+- Output must be plain JSON with no formatting or markdown.
+`;
+  try {
+    const result = await callGeminiAPI(prompt);
+
+    if (!result.slug && formData.topic) {
+      result.slug = formData.topic
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-");
+    }
+
+    const validatedResult = {
+      title: result.title || formData.topic || "Untitled Blog Post",
+      slug: result.slug || "untitled-blog-post",
+      excerpt: result.excerpt || "No excerpt provided.",
+      contentBody: result.contentBody || "No content provided.",
+      hashtags:
+        Array.isArray(result.hashtags) && result.hashtags.length >= 5
+          ? result.hashtags
+          : ["#Blog", "#Content", "#Default", "#Post", "#Generated"],
+    };
+
+    return validatedResult;
+  } catch (error) {
+    throw new Error("Failed to generate blog post: " + error.message);
+  }
 };
 
 // Content Repurposer
 export const repurposeContent = async (originalContent, platform) => {
+  const entropy = Math.random().toString(36).substring(2, 10);
   const platformInstructions = {
     twitter:
-      "Convert this into a concise, engaging tweet with 4 threads separated by a line spacing and a subheading (max 280 chars). Include relevant hashtags and a call-to-action.",
+      "Convert into a concise tweet with 4 threads and a subheading (max 280 chars each). Use emojis and hashtags.",
     linkedin:
-      "Repurpose this into a professional LinkedIn post (max 1300 chars). Use a more formal tone and include relevant hashtags.",
+      "Rewrite as a professional LinkedIn post (max 1300 chars). Use a formal tone and clear CTA.",
     instagram:
-      "Adapt this for an Instagram caption (max 2200 chars). Make it engaging and include relevant hashtags and emojis.",
+      "Make it an Instagram caption (max 2200 chars) with emojis, hashtags, and engaging language.",
     facebook:
-      "Repurpose this for a Facebook post (max 63206 chars). Make it conversational and engaging.",
+      "Adapt for Facebook (max 63206 chars). Make it informal, engaging, and CTA-driven.",
     whatsapp:
-      "Convert this into a concise WhatsApp message (max 65536 chars). Keep it simple and direct.",
+      "Convert to a short, direct WhatsApp message. No fluff. Include CTA.",
   };
 
   const prompt = `
-  Repurpose the following content for ${platform}:
-  ${platformInstructions[platform]}
-  
-  Original Content:
-  ${originalContent}
+Repurpose the following content for ${platform}. Ensure the tone fits the platform and the content is unique, not reused. Avoid repetition or structural similarity.
 
-  Return only the repurposed content as a plain text string with no additional formatting or explanations.
-  `;
+${platformInstructions[platform]}
+
+Original Content:
+${originalContent}
+
+Uniqueness ID: ${entropy}
+
+Return only the repurposed content as plain text.
+`;
 
   return await callGeminiAPI(prompt);
 };
 
+// Content Plan Generator
 export const generateContentPlan = async (formData) => {
   try {
-    // Validate API key
     const apiKey = import.meta.env.VITE_APP_GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error("Gemini API key is missing (VITE_APP_GEMINI_API_KEY)");
     }
 
-    // Ensure contentTypes is a string
     const contentTypes = Array.isArray(formData.contentTypes)
       ? formData.contentTypes.join(", ")
       : formData.contentTypes || "Not specified";
 
-    // Parse numberOfDays and ensure it's an integer
     const numberOfDays = parseInt(formData.numberOfDays, 10);
     if (isNaN(numberOfDays) || numberOfDays < 1) {
       throw new Error("Number of days must be a positive integer");
     }
 
-    // Calculate the number of posts based on posting frequency
     let postDays = [];
     let frequencyDays;
-
     switch (formData.postingFrequency) {
       case "Daily":
         frequencyDays = 1;
@@ -173,148 +206,60 @@ export const generateContentPlan = async (formData) => {
         throw new Error("Invalid posting frequency");
     }
 
-    // Generate post days based on frequency and numberOfDays
     for (let day = 1; day <= numberOfDays; day += frequencyDays) {
       postDays.push(day);
     }
 
-    // Stricter prompt to enforce JSON-only output and fresh content
     const prompt = `
-You are a content marketing strategist. Based on the following details, generate a content plan as a JSON array containing **fresh, original, never-before-used content** that is unique and not recycled from any existing sources. **Return ONLY the JSON array** with no additional text, markdown, explanations, or comments. The output must be pure JSON, parsable by JSON.parse(), with no prefix, suffix, or markdown (e.g., no \`\`\`json markers). Do not include any introductory text, code blocks, or trailing text.
+You are a content strategist. Generate a JSON array of ${
+      postDays.length
+    } fresh, **non-repetitive**, original content ideas. No reused language or prior formatting. Avoid duplication in structure, wording, or hashtags. Make each post unique.
 
 Format:
 [
   {
     "Day": 1,
-    "content": "A detailed description of the post",
-    "imagePrompt": "A prompt for generating an image (if applicable)"
+    "content": "Full, ready-to-post content here (min 35 words)",
+    "imagePrompt": "Highly descriptive image idea"
   },
-  {...},
-  {...}
+  ...
 ]
 
 Details:
-- Business Name: ${formData.businessName}
-- Nature: ${formData.nature}
+- Business: ${formData.businessName}
 - Description: ${formData.description}
+- Industry: ${formData.nature}
 - Goals: ${formData.businessGoals}
 - Target Audience: ${formData.targetAudience}
 - Content Types: ${contentTypes}
-- Posting Frequency: ${formData.postingFrequency}
-- Tone of Voice: ${formData.toneOfVoice}
-- Extra Notes: ${formData.extraNotes || "None"}
+- Frequency: ${formData.postingFrequency}
+- Tone: ${formData.toneOfVoice}
 - Duration: ${numberOfDays} days
+- Extra Notes: ${formData.extraNotes || "None"}
 - Post Days: ${postDays.join(", ")}
 
-Generate exactly ${
-      postDays.length
-    } posts, scheduling them on the following days: ${postDays.join(
-      ", "
-    )}. Include imagePrompt only if the content type includes "Social Media Campaigns" and let the image prompt be highly descriptive, unique, and directly related to the text content for uniformity and flow. Use the specified tone of voice and tailor the content to the pain points of the target audience and the social media goal(s). Provide complete, ready-to-post content that requires no editing for optimal results. Include a compelling CTA at the end and a minimum of 4 strong hashtag keywords. Each content piece should be a minimum of 35 words. Ensure all content is entirely original, created specifically for this request, and not based on any previously generated or existing material.
+Include imagePrompt only if content includes "Social Media Campaigns". Add compelling CTA and 4+ hashtags per post.
 
-**Output only the JSON array, nothing else. No markdown, no \`\`\`json, no extra text.**
+**Return ONLY the JSON array. No markdown, no \`\`\`, no explanation.**
 `;
 
-    console.log("Sending request to Gemini API with prompt:", prompt);
+    const data = await callGeminiAPI(prompt);
 
-    const response = await fetch(GEMINI_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-      }),
-    });
+    let validatedArray = Array.isArray(data)
+      ? data.slice(0, postDays.length)
+      : [];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API response error:", response.status, errorText);
-      throw new Error(`Gemini API failed: ${response.status} - ${errorText}`);
+    while (validatedArray.length < postDays.length) {
+      validatedArray.push({
+        Day: postDays[validatedArray.length],
+        content: "Default content (placeholder)",
+        imagePrompt: "",
+      });
     }
 
-    const data = await response.json();
-    console.log("Raw Gemini API response:", data);
-
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-      console.error("No content received from Gemini API:", data);
-      throw new Error("No content received from Gemini API");
-    }
-
-    console.log("Extracted text from Gemini API:", text);
-
-    // Preprocess the response to remove markdown code blocks
-    let cleanedText = text.trim();
-    cleanedText = cleanedText
-      .replace(/```json\n?/, "")
-      .replace(/```\n?/, "")
-      .trim();
-    console.log("Cleaned text after removing markdown:", cleanedText);
-
-    // Attempt to parse the response as JSON
-    let jsonArray;
-    try {
-      jsonArray = JSON.parse(cleanedText);
-    } catch (error) {
-      console.error(
-        "Failed to parse Gemini API response as JSON:",
-        error,
-        cleanedText
-      );
-
-      // Fallback: Attempt to extract JSON array using regex
-      const match = cleanedText.match(/\[\s*{[\s\S]*?}\s*\]/);
-      if (!match) {
-        throw new Error("Failed to extract valid JSON array from response");
-      }
-
-      try {
-        jsonArray = JSON.parse(match[0]);
-      } catch (secondError) {
-        console.error("Failed to parse extracted JSON array:", secondError);
-        throw new Error("Invalid JSON array in Gemini API response");
-      }
-    }
-
-    // Validate that the result is an array
-    if (!Array.isArray(jsonArray)) {
-      console.error("Gemini API response is not an array:", jsonArray);
-      throw new Error("Gemini API response is not a valid JSON array");
-    }
-
-    // Ensure the number of posts matches the expected count
-    if (jsonArray.length !== postDays.length) {
-      console.warn(
-        `Expected ${postDays.length} posts, but received ${jsonArray.length}. Adjusting...`
-      );
-      jsonArray = jsonArray.slice(0, postDays.length);
-      while (jsonArray.length < postDays.length) {
-        jsonArray.push({
-          Day: postDays[jsonArray.length],
-          content: "Default content (placeholder)",
-          imagePrompt: "",
-        });
-      }
-    }
-
-    // Ensure each item has required fields
-    const validatedArray = jsonArray.map((item, index) => ({
-      Day: item.Day || postDays[index],
-      content: item.content || "Default content",
-      imagePrompt: item.imagePrompt || "",
-    }));
-
-    console.log("Validated content plan:", validatedArray);
     return validatedArray;
   } catch (error) {
     console.error("Gemini REST API error:", error);
-    return []; // Return an empty array as a fallback to prevent breaking the UI
+    return [];
   }
 };

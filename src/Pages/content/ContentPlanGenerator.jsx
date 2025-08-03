@@ -1,23 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../../context/UserContext";
-import { db, auth } from "../../lib/firebase";
-import {
-  collection,
-  addDoc,
-  doc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
+import { db } from "../../lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { generateContentPlan } from "../../lib/gemini";
-import { jsPDF } from "jspdf";
 import { Copy, X } from "lucide-react";
 
 const ContentPlanGenerator = () => {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { user, userData, incrementUsage } = useUser();
   const [formData, setFormData] = useState({
     businessName: "",
     nature: "",
@@ -42,90 +33,22 @@ const ContentPlanGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [subscription, setSubscription] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState({});
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        const userDocRef = doc(db, "users", currentUser.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          const subData = userData.subscription || {};
-          const now = new Date();
-          const startDate = subData.startDate?.toDate();
-          if (!startDate || now - startDate > 30 * 24 * 60 * 60 * 1000) {
-            await updateDoc(userDocRef, {
-              subscription: {
-                ...subData,
-                contentPlanAttempts: 0,
-                blogPostAttempts: 0,
-                contentStrategyAttempts: 0,
-                startDate: serverTimestamp(),
-              },
-            });
-            subData.contentPlanAttempts = 0;
-            subData.blogPostAttempts = 0;
-            subData.contentStrategyAttempts = 0;
-            subData.startDate = new Date();
-          }
-          setSubscription(subData);
-        }
-      }
-    });
-    return () => unsubscribe();
-  }, []);
 
   const checkContentPlanLimit = () => {
     if (!user) return "Please sign in to create a content plan.";
-    if (!subscription) return "Loading subscription data...";
+    if (!userData?.subscription) return "Loading subscription data...";
 
-    const { plan, contentPlanAttempts } = subscription;
+    const { plan, contentPlans } = userData.subscription;
     let maxPlans;
     if (plan === "Free") maxPlans = 5;
     else if (plan === "Growth") maxPlans = 20;
     else if (plan === "Enterprise") maxPlans = 50;
 
-    if (contentPlanAttempts >= maxPlans) {
+    if (contentPlans >= maxPlans) {
       return `You have reached the limit of ${maxPlans} content plan creations this month. Upgrade your plan to continue.`;
     }
     return null;
-  };
-
-  const incrementContentPlanAttempts = async () => {
-    if (!user || !subscription) return;
-
-    const userDocRef = doc(db, "users", user.uid);
-    await updateDoc(userDocRef, {
-      "subscription.contentPlanAttempts": subscription.contentPlanAttempts + 1,
-    });
-    setSubscription((prev) => ({
-      ...prev,
-      contentPlanAttempts: prev.contentPlanAttempts + 1,
-    }));
-  };
-
-  const handleCopy = (text, itemId, field) => {
-    if (!text || text === "-") return;
-
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setCopyFeedback((prev) => ({
-          ...prev,
-          [`${itemId}-${field}`]: true,
-        }));
-        setTimeout(() => {
-          setCopyFeedback((prev) => ({
-            ...prev,
-            [`${itemId}-${field}`]: false,
-          }));
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error("Failed to copy text:", err);
-      });
   };
 
   const businessGoalsOptions = [
@@ -254,10 +177,10 @@ const ContentPlanGenerator = () => {
       label: "Number of Days for Content Plan",
       field: "numberOfDays",
       type: "number",
-      placeholder: "e.g., 7",
+      placeholder: "e.g., 7 (1 - 30 days)",
       required: true,
       min: 1,
-      max: 90,
+      max: 30,
     },
     {
       label: "Extra Notes",
@@ -325,6 +248,7 @@ const ContentPlanGenerator = () => {
     const limitMessage = checkContentPlanLimit();
     if (limitMessage) {
       setError(limitMessage);
+      setLoading(false);
       return;
     }
 
@@ -344,6 +268,15 @@ const ContentPlanGenerator = () => {
 
     if (missingFields.length > 0) {
       setError("Please fill in all required fields.");
+      setLoading(false);
+      return;
+    }
+
+    if (!incrementUsage) {
+      setError(
+        "Internal error: Usage tracking is not available. Please contact support."
+      );
+      setLoading(false);
       return;
     }
 
@@ -355,11 +288,11 @@ const ContentPlanGenerator = () => {
       if (!generatedPlan || generatedPlan.length === 0) {
         throw new Error("Generated content plan is empty");
       }
+      await incrementUsage("contentPlans");
       setContentPlan(generatedPlan);
       setIsModalOpen(false);
       setCurrentStep(0);
       setIsReadyToGenerate(false);
-      await incrementContentPlanAttempts();
     } catch (err) {
       setError(`Failed to generate content plan: ${err.message}`);
       console.error("Generate content plan error:", err);
@@ -387,10 +320,10 @@ const ContentPlanGenerator = () => {
         userId: user.uid,
         contentPlan,
         formData,
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
       });
       setSuccess("Content plan saved successfully!");
-      setTimeout(() => navigate("/content-plan"), 2000);
+      setTimeout(() => navigate("/content-plans"), 2000);
     } catch (err) {
       setError("Failed to save content plan: " + err.message);
       console.error("Save content plan error:", err);
@@ -399,114 +332,26 @@ const ContentPlanGenerator = () => {
     }
   };
 
-  const handleDownloadPDF = () => {
-    if (!contentPlan) return;
+  const handleCopy = (text, itemId, field) => {
+    if (!text || text === "-") return;
 
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.height;
-    const margin = 10;
-    let yPosition = margin;
-
-    const addText = (text, x, y, options = {}) => {
-      const maxWidth = options.maxWidth || 190;
-      const lineHeight = options.lineHeight || 5;
-
-      const lines = doc.splitTextToSize(text, maxWidth);
-      const requiredHeight = lines.length * lineHeight;
-
-      if (y + requiredHeight > pageHeight - margin) {
-        doc.addPage();
-        yPosition = margin;
-      }
-
-      doc.text(lines, x, yPosition, options);
-      yPosition += requiredHeight;
-    };
-
-    const drawTableRow = (rowData, colWidths, rowHeight = 5) => {
-      const totalHeight = rowData.reduce((maxHeight, cell) => {
-        const lines = doc.splitTextToSize(
-          cell,
-          colWidths[rowData.indexOf(cell)] - 2
-        );
-        return Math.max(maxHeight, lines.length * rowHeight);
-      }, rowHeight);
-
-      if (yPosition + totalHeight > pageHeight - margin) {
-        doc.addPage();
-        yPosition = margin;
-      }
-
-      let xPosition = margin;
-      rowData.forEach((cell, i) => {
-        const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
-        doc.text(lines, xPosition + 1, yPosition + 4);
-        doc.rect(xPosition, yPosition, colWidths[i], totalHeight);
-        xPosition += colWidths[i];
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopyFeedback((prev) => ({
+          ...prev,
+          [`${itemId}-${field}`]: true,
+        }));
+        setTimeout(() => {
+          setCopyFeedback((prev) => ({
+            ...prev,
+            [`${itemId}-${field}`]: false,
+          }));
+        }, 2000);
+      })
+      .catch((err) => {
+        console.error("Failed to copy text:", err);
       });
-
-      yPosition += totalHeight;
-    };
-
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    addText("Content Plan", margin, yPosition);
-
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    addText(`Name: ${planName || "Unnamed Plan"}`, margin, yPosition);
-
-    doc.setFontSize(10);
-    addText(`Business Name: ${formData.businessName}`, margin, yPosition);
-    addText(`Nature of Business: ${formData.nature}`, margin, yPosition);
-    addText(`Contact Address: ${formData.contactInfo}`, margin, yPosition);
-    addText(`Phone Number: ${formData.phoneNumber}`, margin, yPosition);
-    addText(`Email Address: ${formData.email}`, margin, yPosition);
-    if (formData.websiteLink) {
-      addText(`Website Link: ${formData.websiteLink}`, margin, yPosition);
-    }
-    addText(`Description: ${formData.description}`, margin, yPosition, {
-      maxWidth: 190,
-      lineHeight: 5,
-    });
-    addText(`Business Goals: ${formData.businessGoals}`, margin, yPosition);
-    addText(`Target Audience: ${formData.targetAudience}`, margin, yPosition, {
-      maxWidth: 190,
-      lineHeight: 5,
-    });
-    addText(`Content Type: ${formData.contentTypes}`, margin, yPosition);
-    addText(
-      `Posting Frequency: ${formData.postingFrequency}`,
-      margin,
-      yPosition
-    );
-    addText(`Tone of Voice: ${formData.toneOfVoice}`, margin, yPosition);
-    addText(`Number of Days: ${formData.numberOfDays}`, margin, yPosition);
-    if (formData.extraNotes) {
-      addText(`Extra Notes: ${formData.extraNotes}`, margin, yPosition, {
-        maxWidth: 190,
-        lineHeight: 5,
-      });
-    }
-
-    yPosition += 5;
-
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    addText("Content Plan Schedule", margin, yPosition);
-
-    doc.setFontSize(10);
-    const colWidths = [30, 80, 80];
-    const headers = ["Day", "Content", "Image Prompt"];
-    drawTableRow(headers, colWidths);
-
-    doc.setFont("helvetica", "normal");
-    contentPlan.forEach((item) => {
-      const row = [item.Day.toString(), item.content, item.imagePrompt || "-"];
-      drawTableRow(row, colWidths);
-    });
-
-    doc.save(`${planName || "content-plan"}.pdf`);
   };
 
   const handleOpenModal = () => {
@@ -518,7 +363,6 @@ const ContentPlanGenerator = () => {
     setIsModalOpen(true);
     setError("");
     setSuccess("");
-    setIsReadyToGenerate(false);
   };
 
   const handleCloseModal = () => {
@@ -531,7 +375,7 @@ const ContentPlanGenerator = () => {
   return (
     <div className="min-h-screen max-w-2xl mx-auto h-[calc(100vh-12rem)] overflow-y-auto p-6 pb-32">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-extrabold text-[#5247bf] mb-8 text-center">
+        <h1 className="text-2xl font-extrabold text-[#5247bf] mb-8 text-center">
           Content Creation Board
         </h1>
         {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
@@ -539,21 +383,21 @@ const ContentPlanGenerator = () => {
           <p className="text-green-500 mb-4 text-center">{success}</p>
         )}
 
-        {user && subscription && (
+        {user && userData?.subscription && (
           <div className="text-center text-gray-700 mb-4">
-            <p>Plan: {subscription.plan || "Free"}</p>
+            <p>Plan: {userData.subscription.plan || "Free"}</p>
             <p>
-              Content Plans Created: {subscription.contentPlanAttempts || 0}/
-              {subscription.plan === "Free"
+              Content Plans Created: {userData.subscription.contentPlans || 0}/
+              {userData.subscription.plan === "Free"
                 ? 5
-                : subscription.plan === "Growth"
+                : userData.subscription.plan === "Growth"
                 ? 20
                 : 50}
             </p>
-            {subscription.contentPlanAttempts >=
-              (subscription.plan === "Free"
+            {userData.subscription.contentPlans >=
+              (userData.subscription.plan === "Free"
                 ? 5
-                : subscription.plan === "Growth"
+                : userData.subscription.plan === "Growth"
                 ? 20
                 : 50) && (
               <p>
@@ -668,12 +512,6 @@ const ContentPlanGenerator = () => {
                 disabled={loading}
               >
                 {loading ? "Saving..." : "Save Content Plan"}
-              </button>
-              <button
-                onClick={handleDownloadPDF}
-                className="flex-1 bg-gray-200 text-gray-800 p-3 rounded-lg hover:bg-gray-300 transition-all duration-200"
-              >
-                Download as PDF
               </button>
             </div>
           </div>

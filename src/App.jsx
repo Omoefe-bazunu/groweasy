@@ -22,9 +22,9 @@ import AdminDashboard from "./Pages/AdminDashboard";
 import ContentPlanList from "./Pages/content/ContentPlanList";
 import ContentPlanGenerator from "./Pages/content/ContentPlanGenerator";
 import ContentStrategyList from "./Pages/content/ContentStrategyList";
-import ContentStrategyGenerator from "./pages/content/ContentStrategyGenerator";
+import ContentStrategyGenerator from "./Pages/content/ContentStrategyGenerator";
 import BlogPostList from "./Pages/content/BlogPostList";
-import BlogPostGenerator from "./pages/content/BlogPostGenerator";
+import BlogPostGenerator from "./Pages/content/BlogPostGenerator";
 import ContentRepurposer from "./Pages/content/ContentRepurposer";
 
 const App = () => {

@@ -10,13 +10,13 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { Download, Trash2, ChevronDown, ChevronUp } from "lucide-react";
-import { jsPDF } from "jspdf";
+import { Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
 const BlogPostList = () => {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedPost, setExpandedPost] = useState(null);
+  const [expandedSections, setExpandedSections] = useState({});
   const { user } = useUser();
   const navigate = useNavigate();
 
@@ -52,97 +52,41 @@ const BlogPostList = () => {
       try {
         await deleteDoc(doc(db, "blogPosts", postId));
         setPosts(posts.filter((post) => post.id !== postId));
+        setExpandedSections((prev) => {
+          const newSections = { ...prev };
+          delete newSections[postId];
+          return newSections;
+        });
       } catch (error) {
         console.error("Error deleting blog post:", error);
       }
     }
   };
 
-  const handleDownloadPDF = (post) => {
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.height;
-    const margin = 10;
-    let yPosition = margin;
-
-    const addText = (text, x, y, options = {}) => {
-      const maxWidth = options.maxWidth || 190;
-      const lineHeight = options.lineHeight || 5;
-
-      const lines = doc.splitTextToSize(text, maxWidth);
-      const requiredHeight = lines.length * lineHeight;
-
-      if (y + requiredHeight > pageHeight - margin) {
-        doc.addPage();
-        yPosition = margin;
-      }
-
-      doc.text(lines, x, yPosition, options);
-      yPosition += requiredHeight;
-    };
-
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    addText(post.title, margin, yPosition);
-    yPosition += 10;
-
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    addText(`Topic: ${post.topic}`, margin, yPosition);
-    yPosition += 5;
-    addText(
-      `Created: ${new Date(post.createdAt).toLocaleDateString()}`,
-      margin,
-      yPosition
-    );
-    yPosition += 10;
-
-    // Add post sections
-    if (post.post.excerpt) {
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      addText("Excerpt", margin, yPosition);
-      yPosition += 7;
-
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      addText(post.post.excerpt, margin, yPosition, {
-        maxWidth: 190,
-        lineHeight: 5,
-      });
-      yPosition += (post.post.excerpt.split(" ").length / 10) * 5 + 10;
-    }
-
-    if (post.post.contentBody) {
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      addText("Content", margin, yPosition);
-      yPosition += 7;
-
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      addText(post.post.contentBody, margin, yPosition, {
-        maxWidth: 190,
-        lineHeight: 5,
-      });
-      yPosition += (post.post.contentBody.split(" ").length / 10) * 5 + 10;
-    }
-
-    if (post.post.hashtags && post.post.hashtags.length > 0) {
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      addText("Hashtags", margin, yPosition);
-      yPosition += 7;
-
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      addText(post.post.hashtags.join(" "), margin, yPosition);
-    }
-
-    doc.save(`${post.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`);
-  };
-
   const toggleExpand = (postId) => {
     setExpandedPost(expandedPost === postId ? null : postId);
+  };
+
+  const toggleSection = (postId, section) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [postId]: {
+        ...prev[postId],
+        [section]: !prev[postId]?.[section],
+      },
+    }));
+  };
+
+  const formatDate = (createdAt) => {
+    if (!createdAt) return "Date unavailable";
+    try {
+      const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+      if (isNaN(date.getTime())) return "Date unavailable";
+      return date.toLocaleDateString();
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Date unavailable";
+    }
   };
 
   if (loading)
@@ -163,7 +107,7 @@ const BlogPostList = () => {
   return (
     <div className="min-h-screen max-w-2xl mx-auto h-[calc(100vh-12rem)] overflow-y-auto p-6 pb-32">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Your Blog Posts</h1>
+        <h1 className="text-2xl font-bold text-[#5247bf]">Your Blog Posts</h1>
         <button
           onClick={() => navigate("/blog-posts/new")}
           className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
@@ -183,34 +127,24 @@ const BlogPostList = () => {
               onClick={() => toggleExpand(post.id)}
             >
               <div>
-                <h3 className="font-semibold text-lg text-gray-800">
+                <h3 className="font-semibold text-lg text-[#5247bf]">
                   {post.title}
                 </h3>
                 <p className="text-sm text-gray-600">
-                  {post.topic} • {new Date(post.createdAt).toLocaleDateString()}
+                  {post.topic} • {formatDate(post.createdAt)}
                 </p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDownloadPDF(post);
-                  }}
-                  className="text-gray-500 hover:text-indigo-600 p-1 rounded-full"
-                  title="Download as PDF"
-                >
-                  <Download size={18} />
-                </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(post.id);
                   }}
-                  className="text-gray-500 hover:text-red-600 p-1 rounded-full"
+                  className="text-gray-500 mt-2 hover:text-red-600 p-1 rounded-full"
                   title="Delete post"
                 >
                   <Trash2 size={18} />
                 </button>
+              </div>
+              <div className="flex items-center space-x-2">
                 {expandedPost === post.id ? (
                   <ChevronUp size={20} />
                 ) : (
@@ -221,37 +155,96 @@ const BlogPostList = () => {
 
             {expandedPost === post.id && (
               <div className="border-t border-gray-200 p-4">
+                {/* Slug Section */}
+                <div className="mb-4">
+                  <div
+                    className="flex justify-between items-center cursor-pointer"
+                    onClick={() => toggleSection(post.id, "slug")}
+                  >
+                    <h4 className="font-medium text-gray-800">Slug</h4>
+                    {expandedSections[post.id]?.slug ? (
+                      <ChevronUp size={20} className="text-gray-600" />
+                    ) : (
+                      <ChevronDown size={20} className="text-gray-600" />
+                    )}
+                  </div>
+                  {expandedSections[post.id]?.slug && (
+                    <p className="text-gray-700 whitespace-pre-wrap mt-2 ">
+                      {post.post.slug || "No slug available"}
+                    </p>
+                  )}
+                </div>
+
+                {/* Excerpt Section */}
                 {post.post.excerpt && (
                   <div className="mb-4">
-                    <h4 className="font-medium text-gray-800 mb-1">Excerpt</h4>
-                    <p className="text-gray-700 whitespace-pre-wrap">
-                      {post.post.excerpt}
-                    </p>
+                    <div
+                      className="flex justify-between items-center cursor-pointer border-t border-gray-200 py-2"
+                      onClick={() => toggleSection(post.id, "excerpt")}
+                    >
+                      <h4 className="font-medium text-gray-800">Excerpt</h4>
+                      {expandedSections[post.id]?.excerpt ? (
+                        <ChevronUp size={20} className="text-gray-600" />
+                      ) : (
+                        <ChevronDown size={20} className="text-gray-600" />
+                      )}
+                    </div>
+                    {expandedSections[post.id]?.excerpt && (
+                      <p className="text-gray-700 whitespace-pre-wrap mt-2">
+                        {post.post.excerpt}
+                      </p>
+                    )}
                   </div>
                 )}
 
+                {/* Content Section */}
                 {post.post.contentBody && (
                   <div className="mb-4">
-                    <h4 className="font-medium text-gray-800 mb-1">Content</h4>
-                    <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
-                      {post.post.contentBody}
+                    <div
+                      className="flex justify-between items-center cursor-pointer border-t border-gray-200 py-2"
+                      onClick={() => toggleSection(post.id, "contentBody")}
+                    >
+                      <h4 className="font-medium text-gray-800">Content</h4>
+                      {expandedSections[post.id]?.contentBody ? (
+                        <ChevronUp size={20} className="text-gray-600" />
+                      ) : (
+                        <ChevronDown size={20} className="text-gray-600" />
+                      )}
                     </div>
+                    {expandedSections[post.id]?.contentBody && (
+                      <div className="prose max-w-none text-gray-700 whitespace-pre-wrap mt-2">
+                        {post.post.contentBody}
+                      </div>
+                    )}
                   </div>
                 )}
 
+                {/* Hashtags Section */}
                 {post.post.hashtags && post.post.hashtags.length > 0 && (
                   <div>
-                    <h4 className="font-medium text-gray-800 mb-1">Hashtags</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {post.post.hashtags.map((hashtag, index) => (
-                        <span
-                          key={index}
-                          className="bg-gray-100 px-2 py-1 rounded text-sm"
-                        >
-                          {hashtag}
-                        </span>
-                      ))}
+                    <div
+                      className="flex justify-between items-center cursor-pointer border-t border-gray-200 py-2"
+                      onClick={() => toggleSection(post.id, "hashtags")}
+                    >
+                      <h4 className="font-medium text-gray-800">Hashtags</h4>
+                      {expandedSections[post.id]?.hashtags ? (
+                        <ChevronUp size={20} className="text-gray-600" />
+                      ) : (
+                        <ChevronDown size={20} className="text-gray-600" />
+                      )}
                     </div>
+                    {expandedSections[post.id]?.hashtags && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {post.post.hashtags.map((hashtag, index) => (
+                          <span
+                            key={index}
+                            className="bg-indigo-500 px-2 py-1 rounded text-sm"
+                          >
+                            {hashtag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
