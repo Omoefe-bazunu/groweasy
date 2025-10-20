@@ -41,7 +41,7 @@ const ContentCreationBoard = () => {
     <div className=" min-h-screen overflow-y-autobg-cover bg-center bg-no-repeat px-6 py-12">
       <div className="  max-w-2xl mx-auto h-fit">
         <h1 className="text-3xl font-extrabold text-[#5247bf] mb-8 text-center">
-          Content Creation Board
+          Business Tools
         </h1>
 
         {/* Content Grid */}

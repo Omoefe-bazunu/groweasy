@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { auth, db, storage } from "../lib/firebase";
 import {
   doc,
-  getDoc,
   updateDoc,
   collection,
   addDoc,
@@ -118,7 +117,7 @@ export default function Donation() {
       await sendAdminNotification(requestData);
 
       setSuccess(
-        `Donation request submitted for ₦${parseFloat(donationAmount).toLocaleString()}! Pending admin approval within 20 minutes.`
+        `Donation received for ₦${parseFloat(donationAmount).toLocaleString()}! Pending admin confirmation within 20 minutes. Thank you for the good cause`
       );
       setScreenshot(null);
       setDonationAmount("");
@@ -165,7 +164,7 @@ export default function Donation() {
               Support Our Effort
             </h2>
             <p className="text-gray-700">
-              Your donation helps keep our website free for all business owners
+              Your donation helps keep the plaform free for all business owners
               by covering hosting, updates, and maintenance costs to ensure a
               smooth experience.
             </p>

@@ -1,8 +1,23 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
 import { db } from "../lib/firebase";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { Search, Calendar, FileText, Plus, Download } from "lucide-react";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import {
+  Search,
+  Calendar,
+  FileText,
+  Plus,
+  Download,
+  Trash2,
+} from "lucide-react";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -15,6 +30,7 @@ const InvoicesList = () => {
   const [searchText, setSearchText] = useState("");
   const [searchDate, setSearchDate] = useState("");
   const [downloading, setDownloading] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     fetchInvoices();
@@ -82,6 +98,38 @@ const InvoicesList = () => {
     }
 
     setFilteredInvoices(filtered);
+  };
+
+  const formatCurrency = (value) => {
+    return parseFloat(value).toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const deleteInvoice = async (invoiceId) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this invoice? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    setDeleting(invoiceId);
+    try {
+      await deleteDoc(doc(db, "invoices", invoiceId));
+      setInvoices(invoices.filter((inv) => inv.id !== invoiceId));
+      setFilteredInvoices(
+        filteredInvoices.filter((inv) => inv.id !== invoiceId)
+      );
+      toast.success("Invoice deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting invoice:", error);
+      toast.error("Failed to delete invoice");
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const downloadAsImage = async (invoice) => {
@@ -235,22 +283,22 @@ const InvoicesList = () => {
                 <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">${item.description || "-"}</td>
                 <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${item.qty || "-"}</td>
                 <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${item.unitPrice ? `$${item.unitPrice}` : "-"}
+                  ${item.unitPrice ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
                 </td>
                 <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
                   ${
                     item.qty && item.unitPrice
-                      ? `$${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toFixed(2)}`
+                      ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : "-"
                   }
                 </td>
                 <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${item.discount ? `$${item.discount}` : "-"}
+                  ${item.discount ? `₦${parseFloat(item.discount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
                 </td>
                 <td style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">
                   ${
                     item.qty && item.unitPrice
-                      ? `$${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toFixed(2)}`
+                      ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : "-"
                   }
                 </td>
@@ -262,7 +310,7 @@ const InvoicesList = () => {
           <tfoot>
             <tr style="background-color: #f5f5f5;">
               <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total Due:</td>
-              <td style="padding: 8px; text-align: right; font-weight: bold; color: black; border: 1px solid #ddd;">$${invoice.total}</td>
+              <td style="padding: 8px; text-align: right; font-weight: bold; color: black; border: 1px solid #ddd;">₦${parseFloat(invoice.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
             ${
               invoice.dueDate
@@ -318,7 +366,7 @@ const InvoicesList = () => {
             <p className="text-gray-600 mt-1">Manage all your invoices</p>
           </div>
           <button
-            onClick={() => (window.location.href = "/invoices/new")}
+            onClick={() => (window.location.href = "/invoices")}
             className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
           >
             <Plus className="w-5 h-5" />
@@ -365,7 +413,7 @@ const InvoicesList = () => {
             </p>
             {!searchText && !searchDate && (
               <button
-                onClick={() => (window.location.href = "/invoices/new")}
+                onClick={() => (window.location.href = "/invoices")}
                 className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
               >
                 Create Your First Invoice
@@ -415,7 +463,7 @@ const InvoicesList = () => {
                         item(s)
                       </span>
                       <span className="text-lg font-bold text-[#5247bf]">
-                        ${invoice.total}
+                        ₦{formatCurrency(invoice.total)}
                       </span>
                     </div>
                     {invoice.dueDate && (
@@ -429,7 +477,9 @@ const InvoicesList = () => {
                   <div className="pt-4 border-t border-gray-200 flex gap-2">
                     <button
                       onClick={() => downloadAsImage(invoice)}
-                      disabled={downloading === invoice.id}
+                      disabled={
+                        downloading === invoice.id || deleting === invoice.id
+                      }
                       className="flex-1 flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
@@ -437,11 +487,24 @@ const InvoicesList = () => {
                     </button>
                     <button
                       onClick={() => downloadAsPDF(invoice)}
-                      disabled={downloading === invoice.id}
+                      disabled={
+                        downloading === invoice.id || deleting === invoice.id
+                      }
                       className="flex-1 flex items-center justify-center gap-1 bg-[#5247bf] hover:bg-blue-900 text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
                       {downloading === invoice.id ? "..." : "PDF"}
+                    </button>
+                    <button
+                      onClick={() => deleteInvoice(invoice.id)}
+                      disabled={
+                        downloading === invoice.id || deleting === invoice.id
+                      }
+                      className="flex items-center justify-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 text-sm font-medium py-2 px-3 rounded transition-colors disabled:opacity-50"
+                      title="Delete invoice"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deleting === invoice.id ? "..." : ""}
                     </button>
                   </div>
                 </div>

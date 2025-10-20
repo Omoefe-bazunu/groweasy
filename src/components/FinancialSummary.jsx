@@ -52,6 +52,13 @@ const FinancialSummary = () => {
     }
   }, [records, period, searchTerm, dateFilter]);
 
+  const formatCurrency = (value) => {
+    return parseFloat(value).toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
   const fetchRecords = async () => {
     setLoading(true);
     try {
@@ -179,7 +186,7 @@ const FinancialSummary = () => {
       type: netBalance >= 0 ? "positive" : "negative",
       icon: netBalance >= 0 ? TrendingUp : TrendingDown,
       title: netBalance >= 0 ? "Profitable Period" : "Deficit Period",
-      description: `Net ${netBalance >= 0 ? "surplus" : "deficit"} of $${Math.abs(netBalance).toFixed(2)}`,
+      description: `Net ${netBalance >= 0 ? "surplus" : "deficit"} of ₦${formatCurrency(Math.abs(netBalance))}`,
     });
 
     if (summary.periods && summary.periods.length > 0) {
@@ -190,7 +197,7 @@ const FinancialSummary = () => {
         type: "info",
         icon: Activity,
         title: `Best ${period.charAt(0).toUpperCase() + period.slice(1)}`,
-        description: `${bestPeriod.period} with $${bestPeriod.net.toFixed(2)} net`,
+        description: `${bestPeriod.period} with ₦${formatCurrency(bestPeriod.net)} net`,
       });
     }
 
@@ -200,7 +207,7 @@ const FinancialSummary = () => {
       type: "info",
       icon: DollarSign,
       title: "Average Inflow",
-      description: `$${avgInflow.toFixed(2)} per transaction`,
+      description: `₦${formatCurrency(avgInflow)} per transaction`,
     });
 
     if (summary.periods && summary.periods.length >= 2) {
@@ -241,14 +248,18 @@ const FinancialSummary = () => {
       14,
       30
     );
-    doc.text(`Total Inflow: $${summary.totalInflow?.toFixed(2) || 0}`, 14, 38);
     doc.text(
-      `Total Outflow: $${summary.totalOutflow?.toFixed(2) || 0}`,
+      `Total Inflow: ₦${formatCurrency(summary.totalInflow || 0)}`,
+      14,
+      38
+    );
+    doc.text(
+      `Total Outflow: ₦${formatCurrency(summary.totalOutflow || 0)}`,
       14,
       46
     );
     doc.text(
-      `Net: $${(summary.totalInflow - summary.totalOutflow).toFixed(2)}`,
+      `Net: ₦${formatCurrency(summary.totalInflow - summary.totalOutflow || 0)}`,
       14,
       54
     );
@@ -262,7 +273,7 @@ const FinancialSummary = () => {
         yPos = 20;
       }
       doc.text(
-        `${p.period}: Inflow $${p.inflow.toFixed(2)}, Outflow $${p.outflow.toFixed(2)}, Net $${p.net.toFixed(2)}`,
+        `${p.period}: Inflow ₦${formatCurrency(p.inflow)}, Outflow ₦${formatCurrency(p.outflow)}, Net ₦${formatCurrency(p.net)}`,
         14,
         yPos
       );
@@ -417,7 +428,7 @@ const FinancialSummary = () => {
               <TrendingUp className="w-5 h-5 text-green-600" />
             </div>
             <p className="text-3xl font-bold text-green-600">
-              ${summary.totalInflow?.toFixed(2) || 0}
+              ₦{formatCurrency(summary.totalInflow || 0)}
             </p>
           </div>
 
@@ -427,7 +438,7 @@ const FinancialSummary = () => {
               <TrendingDown className="w-5 h-5 text-red-600" />
             </div>
             <p className="text-3xl font-bold text-red-600">
-              ${summary.totalOutflow?.toFixed(2) || 0}
+              ₦{formatCurrency(summary.totalOutflow || 0)}
             </p>
           </div>
 
@@ -445,7 +456,7 @@ const FinancialSummary = () => {
             <p
               className={`text-3xl font-bold ${netBalance >= 0 ? "text-green-600" : "text-red-600"}`}
             >
-              ${Math.abs(netBalance).toFixed(2)}
+              ₦{formatCurrency(Math.abs(netBalance))}
             </p>
             <p className="text-xs text-gray-600 mt-1">
               {netBalance >= 0 ? "Surplus" : "Deficit"}
@@ -496,7 +507,9 @@ const FinancialSummary = () => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="period" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip
+                      formatter={(value) => `₦${formatCurrency(value)}`}
+                    />
                     <Legend />
                     <Line
                       type="monotone"
@@ -527,7 +540,9 @@ const FinancialSummary = () => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="period" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip
+                      formatter={(value) => `₦${formatCurrency(value)}`}
+                    />
                     <Legend />
                     <Bar dataKey="net" fill="#3b82f6" name="Net Balance" />
                   </BarChart>
@@ -563,13 +578,13 @@ const FinancialSummary = () => {
                           <div>
                             <span className="text-gray-600">Inflow:</span>
                             <span className="font-semibold text-green-600 ml-2">
-                              ${p.inflow.toFixed(2)}
+                              ₦{formatCurrency(p.inflow)}
                             </span>
                           </div>
                           <div>
                             <span className="text-gray-600">Outflow:</span>
                             <span className="font-semibold text-red-600 mx-2">
-                              ${p.outflow.toFixed(2)}
+                              ₦{formatCurrency(p.outflow)}
                             </span>
                           </div>
                           <div className="ml-2">
@@ -577,7 +592,7 @@ const FinancialSummary = () => {
                             <span
                               className={`font-semibold ml-2 ${p.net >= 0 ? "text-green-600" : "text-red-600"}`}
                             >
-                              ${p.net.toFixed(2)}
+                              ₦{formatCurrency(p.net)}
                             </span>
                           </div>
                           <div>
@@ -634,11 +649,13 @@ const FinancialSummary = () => {
                                     {t.details}
                                   </td>
                                   <td className="p-2 text-right text-green-600 font-semibold">
-                                    {t.inflow ? `$${t.inflow.toFixed(2)}` : "-"}
+                                    {t.inflow
+                                      ? `₦${formatCurrency(t.inflow)}`
+                                      : "-"}
                                   </td>
                                   <td className="p-2 text-right text-red-600 font-semibold">
                                     {t.outflow
-                                      ? `$${t.outflow.toFixed(2)}`
+                                      ? `₦${formatCurrency(t.outflow)}`
                                       : "-"}
                                   </td>
                                 </tr>
