@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useUser } from "../../context/UserContext";
-import { db } from "../../lib/firebase";
+import { useUser } from "../context/UserContext";
+import { db } from "../lib/firebase";
 import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 import { Search, Calendar, FileText, Plus, Download } from "lucide-react";
 import { toast } from "react-toastify";
@@ -309,7 +309,7 @@ const InvoicesList = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-6 pt-6 pb-30 text-gray-600">
+    <div className="min-h-screen bg-gray-50 px-2 pt-6 pb-30 text-gray-600">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
@@ -319,7 +319,7 @@ const InvoicesList = () => {
           </div>
           <button
             onClick={() => (window.location.href = "/invoices/new")}
-            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
           >
             <Plus className="w-5 h-5" />
             Create Invoice
@@ -366,7 +366,7 @@ const InvoicesList = () => {
             {!searchText && !searchDate && (
               <button
                 onClick={() => (window.location.href = "/invoices/new")}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
               >
                 Create Your First Invoice
               </button>
@@ -414,7 +414,7 @@ const InvoicesList = () => {
                           .length || 0}{" "}
                         item(s)
                       </span>
-                      <span className="text-lg font-bold text-blue-600">
+                      <span className="text-lg font-bold text-[#5247bf]">
                         ${invoice.total}
                       </span>
                     </div>
@@ -438,7 +438,7 @@ const InvoicesList = () => {
                     <button
                       onClick={() => downloadAsPDF(invoice)}
                       disabled={downloading === invoice.id}
-                      className="flex-1 flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-1 bg-[#5247bf] hover:bg-blue-900 text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
                       {downloading === invoice.id ? "..." : "PDF"}

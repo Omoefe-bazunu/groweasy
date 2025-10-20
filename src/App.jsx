@@ -13,13 +13,11 @@ import TopNav from "./components/Header";
 import About from "./Pages/About";
 import Contact from "./Pages/Contact";
 import Testimonials from "./Pages/Testimonials";
-import Subscription from "./Pages/Subscription";
 import AdminDashboard from "./Pages/AdminDashboard";
-import ReceiptCreator from "./Pages/BusinessTools/ReceiptCreator";
-import ReceiptList from "./Pages/BusinessTools/ReceiptList";
-import InvoiceCreator from "./Pages/BusinessTools/InvoiceCreator";
-import InvoicesList from "./Pages/BusinessTools/InvoiceList";
 import FinancialRecords from "./Pages/BusinessTools/FinancialRecords";
+import Donation from "./Pages/Donation";
+import Invoice from "./Pages/BusinessTools/Invoice";
+import Receipt from "./Pages/BusinessTools/Receipt";
 
 const App = () => {
   const location = useLocation();
@@ -47,15 +45,13 @@ const App = () => {
         <Route path="/admin/add-expert" element={<AddExpert />} />
         <Route path="/about" element={<About />} />
         <Route path="/testimonials" element={<Testimonials />} />
-        <Route path="/subscribe" element={<Subscription />} />
+        <Route path="/donation" element={<Donation />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/contact" element={<Contact />} />
         {/* Business Tools */}
-        <Route path="/receipts/new" element={<ReceiptCreator />} />
-        <Route path="/receipts" element={<ReceiptList />} />
-        <Route path="/invoices/new" element={<InvoiceCreator />} />
-        <Route path="/invoices" element={<InvoicesList />} />
         <Route path="/financial-records" element={<FinancialRecords />} />
+        <Route path="/invoices" element={<Invoice />} />
+        <Route path="/receipts" element={<Receipt />} />
       </Routes>
       {!hideNavPaths.includes(location.pathname) && !isPublicProfile && (
         <BottomNav />

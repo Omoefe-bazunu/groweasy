@@ -155,7 +155,7 @@ export default function Testimonials() {
 
   return (
     <div className="min-h-screen flex flex-col max-w-4xl mx-auto px-6 pt-10 space-y-8 pb-25">
-      <h1 className="text-3xl font-bold text-center text-[#5247bf]">
+      <h1 className="text-4xl font-extrabold text-center text-[#5247bf]">
         Testimonials
       </h1>
 

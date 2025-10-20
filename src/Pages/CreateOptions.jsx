@@ -9,7 +9,7 @@ const CreateOptions = ({ onClose }) => {
       title: "Receipts",
       description: "Create and manage your receipts",
       icon: FileText,
-      path: "/receipts/new",
+      path: "/receipts",
       gradient: "from-blue-500 to-blue-600",
       hoverGradient: "from-blue-600 to-blue-700",
     },
@@ -17,7 +17,7 @@ const CreateOptions = ({ onClose }) => {
       title: "Invoice",
       description: "Create and manage your invoices",
       icon: ClipboardList,
-      path: "/invoices/new",
+      path: "/invoices",
       gradient: "from-purple-500 to-purple-600",
       hoverGradient: "from-purple-600 to-purple-700",
     },
@@ -47,7 +47,7 @@ const CreateOptions = ({ onClose }) => {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 grid-cols-2 gap-4">
         {options.map((option, index) => {
           const Icon = option.icon;
           return (

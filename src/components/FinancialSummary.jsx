@@ -318,7 +318,7 @@ const FinancialSummary = () => {
     <div className="min-h-screen bg-gray-50 text-gray-600">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-6 mt-4">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
             Financial Summary
           </h1>

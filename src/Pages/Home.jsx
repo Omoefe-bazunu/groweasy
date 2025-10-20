@@ -31,8 +31,8 @@ const Onboarding = () => {
         Welcome to GrowEasy
       </h1>
       <p className="  text-gray-900 mb-4 text-center max-w-sm">
-        Build your business profile, generate AI-powered content plans, connect
-        with experts and grow smarter
+        Seamlessly create important business documents, keep accurate record of
+        your business cash flow, connect with experts and grow smarter.
       </p>
       <div className="flex space-x-4 mt-2 mb-6">
         <Link

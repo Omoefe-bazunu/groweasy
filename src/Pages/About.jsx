@@ -1,23 +1,45 @@
 const About = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white p-6 pb-20 ">
-      <h1 className="text-3xl font-extrabold text-[#5247bf] mb-8 text-center">
-        About GrowEasy
-      </h1>
-      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-8">
-        <p className="text-gray-600 text-lg leading-relaxed">
-          <strong>GrowEasy </strong>is an AI-powered tech solution built by
-          HIGH-ER ENTERPRISES to help you create a practical and social
-          media-ready content plan for any number of days you choose and for the
-          platforms that best fit your products and services. It’s a simple PLUG
-          and PLAY system that saves you the mental stress, saves you the cost
-          of hiring a content creator if you’re on a tight budget, and also acts
-          as your consistency coach by giving you what to post every day to keep
-          your audience engaged, as well as meet monetization benchmarks on
-          platforms like Facebook.
+    <section className="min-h-screen bg-gradient-to-b from-purple-50 to-white pt-10 pb-30 px-6 flex items-center">
+      <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-10 md:p-14 border border-gray-100">
+        <h1 className="text-4xl font-extrabold text-[#5247bf] mb-6 text-center tracking-tight">
+          About GrowEasy
+        </h1>
+
+        <p className="text-gray-700 text-lg leading-relaxed text-justify mb-4">
+          <strong className="text-[#5247bf] font-semibold">GrowEasy</strong> is
+          a free digital business tool built by{" "}
+          <span className="font-medium">HIGH-ER ENTERPRISES</span>, a digital
+          solutions startup (
+          <a
+            href="https://www.higher.com.ng"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#5247bf] hover:underline font-medium"
+          >
+            www.higher.com.ng
+          </a>
+          ), created to help businesses of all sizes improve their performance
+          and workflow.
+        </p>
+
+        <p className="text-gray-700 text-lg leading-relaxed text-justify mb-4">
+          With GrowEasy, you can seamlessly generate essential business
+          documents such as <span className="font-medium">receipts</span>,{" "}
+          <span className="font-medium">invoices</span>, and{" "}
+          <span className="font-medium">business profiles or portfolios</span>.
+          It also helps you keep accurate financial records, enabling you to
+          track your cash flow, analyze performance over time, and make
+          profitable business decisions.
+        </p>
+
+        <p className="text-gray-700 text-lg leading-relaxed text-justify mt-6 italic">
+          We welcome your reviews and suggestions to make the platform even
+          better for you. Feel free to{" "}
+          <span className="font-semibold">get in touch anytime!</span>
         </p>
       </div>
-    </div>
+    </section>
   );
 };
 

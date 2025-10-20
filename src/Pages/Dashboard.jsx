@@ -63,7 +63,7 @@ const Dashboard = () => {
   const handleCreations = () => navigate("/content-creation-board");
   const handleBusinessProfile = () => navigate("/profile");
   const handleViewDocuments = () => navigate("/documents");
-  const handleManageSubscription = () => navigate("/subscribe");
+  const handleManageDonation = () => navigate("/donation");
 
   const copyAffiliateLink = () => {
     const link = `${window.location.origin}/signup?ref=${user.uid}`;
@@ -127,7 +127,7 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 gap-6 max-w-2xl mx-auto">
         <div
-          className="bg-white rounded-xl shadow-lg text-gray-500 p-6 hover:bg-purple-50 hover:shadow-xl transition-all duration-300 cursor-pointer"
+          className="bg-white hidden rounded-xl shadow-lg text-gray-500 p-6 hover:bg-purple-50 hover:shadow-xl transition-all duration-300 cursor-pointer"
           onClick={() => setAffiliateOpen(!affiliateOpen)}
         >
           <div className="flex justify-between items-center">
@@ -275,22 +275,18 @@ const Dashboard = () => {
         </div>
 
         <div
-          onClick={handleManageSubscription}
+          onClick={handleManageDonation}
           className="bg-white rounded-xl mb-20 shadow-lg p-6 flex items-center space-x-4 hover:bg-purple-50 hover:shadow-xl transition-all duration-300 cursor-pointer"
         >
           <CreditCard className="w-8 h-8 text-[#5247bf]" />
           <div className="flex-1">
             <h2 className="text-sm lg:text-xl font-semibold text-gray-800">
-              Subscription
+              Donation
             </h2>
-            <p className="text-gray-600 text-sm mt-1">
-              Current Plan: {subscription.plan} ({subscription.status})
-            </p>
+            <p className="text-gray-600 text-sm mt-1">Support this platform</p>
           </div>
           <button className="bg-[#5247bf] w-24 text-white px-4 py-2 rounded-lg hover:bg-[#4238a6]">
-            {isPaidPlan && subscription.status === "active"
-              ? "Manage"
-              : "Upgrade"}
+            Donate
           </button>
         </div>
       </div>

@@ -51,7 +51,7 @@ const Contact = () => {
 
   return (
     <div className="min-h-screen bg-white p-6 pb-30">
-      <h1 className="text-3xl font-extrabold text-[#5247bf] mb-8 text-center">
+      <h1 className="text-4xl font-extrabold text-[#5247bf] mb-8 text-center">
         Contact Us
       </h1>
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-8">
