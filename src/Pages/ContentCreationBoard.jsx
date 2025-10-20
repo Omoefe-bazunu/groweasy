@@ -15,32 +15,25 @@ const ContentCreationBoard = () => {
 
   const creationOptions = [
     {
-      id: "contentPlan",
-      title: "Content Plans",
+      id: "receipts",
+      title: "Receipts",
       icon: <FileText className="w-5 h-5" />,
-      description: "Daily content schedule",
-      action: () => navigate("/content-plans"),
+      description: "Payment Receipts",
+      action: () => navigate("/receipts"),
     },
     {
-      id: "contentStrategy",
-      title: "Content Strategies",
+      id: "invoices",
+      title: "Invoices",
       icon: <ClipboardList className="w-5 h-5" />,
-      description: "Long-term content roadmap",
-      action: () => navigate("/content-strategies"),
+      description: "Manage your invoices",
+      action: () => navigate("/invoices"),
     },
     {
-      id: "blogPost",
-      title: "Blog Posts",
+      id: "financial-records",
+      title: "Financial Records",
       icon: <BookOpen className="w-5 h-5" />,
-      description: "SEO-optimized articles",
-      action: () => navigate("/blog-posts"),
-    },
-    {
-      id: "generateImages",
-      title: "Images",
-      icon: <Image className="w-5 h-5" />,
-      description: "AI-powered visuals",
-      action: () => navigate("/create-images"),
+      description: "Manage your financial records",
+      action: () => navigate("/financial-records"),
     },
   ];
 

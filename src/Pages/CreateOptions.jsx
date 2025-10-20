@@ -1,102 +1,92 @@
 import { useNavigate } from "react-router-dom";
-import {
-  FileText,
-  Image,
-  BookOpen,
-  Package,
-  ClipboardList,
-} from "lucide-react";
+import { FileText, ClipboardList, BookOpen, ArrowRight } from "lucide-react";
 
 const CreateOptions = ({ onClose }) => {
   const navigate = useNavigate();
 
-  const handleCreatePlan = () => {
-    navigate("/content-plans/new");
-    onClose();
-  };
+  const options = [
+    {
+      title: "Receipts",
+      description: "Create and manage your receipts",
+      icon: FileText,
+      path: "/receipts/new",
+      gradient: "from-blue-500 to-blue-600",
+      hoverGradient: "from-blue-600 to-blue-700",
+    },
+    {
+      title: "Invoice",
+      description: "Create and manage your invoices",
+      icon: ClipboardList,
+      path: "/invoices/new",
+      gradient: "from-purple-500 to-purple-600",
+      hoverGradient: "from-purple-600 to-purple-700",
+    },
+    {
+      title: "Financial Record",
+      description: "Manage your financial records",
+      icon: BookOpen,
+      path: "/financial-records",
+      gradient: "from-indigo-500 to-indigo-600",
+      hoverGradient: "from-indigo-600 to-indigo-700",
+    },
+  ];
 
-  const handleCreateStrategy = () => {
-    navigate("/content-strategies/new");
-    onClose();
-  };
-
-  const handleCreateBlogPost = () => {
-    navigate("/blog-posts/new");
-    onClose();
-  };
-
-  const handleCreateImages = () => {
-    navigate("/create-images");
+  const handleNavigate = (path) => {
+    navigate(path);
     onClose();
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md md:max-w-lg">
-      <h2 className="text-xl font-semibold text-[#5247bf] mb-4">
-        Create Content
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Content Plan */}
-        <div
-          onClick={handleCreatePlan}
-          className="bg-gray-50 rounded-lg p-4 flex flex-col hover:bg-purple-50 hover:shadow-md transition-all duration-300 cursor-pointer"
-        >
-          <div className="flex items-center space-x-3 mb-2">
-            <FileText className="w-5 h-5 text-[#5247bf]" />
-            <h3 className="font-semibold text-gray-800">Content Plan</h3>
-          </div>
-          <p className="text-xs text-gray-500 pl-8">Daily content schedule</p>
-          <button className="mt-3 self-end bg-[#5247bf] text-white px-3 py-1 text-sm rounded-lg hover:bg-[#4238a6] transition-all duration-200">
-            Create
-          </button>
-        </div>
+    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          Create Business Tools
+        </h2>
+        <p className="text-gray-600 text-sm">
+          Choose what you'd like to create
+        </p>
+      </div>
 
-        {/* Content Strategy */}
-        <div
-          onClick={handleCreateStrategy}
-          className="bg-gray-50 rounded-lg p-4 flex flex-col hover:bg-purple-50 hover:shadow-md transition-all duration-300 cursor-pointer"
-        >
-          <div className="flex items-center space-x-3 mb-2">
-            <ClipboardList className="w-5 h-5 text-[#5247bf]" />
-            <h3 className="font-semibold text-gray-800">Content Strategy</h3>
-          </div>
-          <p className="text-xs text-gray-500 pl-8">
-            Long-term content roadmap
-          </p>
-          <button className="mt-3 self-end bg-[#5247bf] text-white px-3 py-1 text-sm rounded-lg hover:bg-[#4238a6] transition-all duration-200">
-            Create
-          </button>
-        </div>
+      <div className="grid grid-cols-3 gap-4">
+        {options.map((option, index) => {
+          const Icon = option.icon;
+          return (
+            <button
+              key={index}
+              onClick={() => handleNavigate(option.path)}
+              className="group relative bg-white border-2 border-gray-200 rounded-xl p-6 hover:border-transparent hover:shadow-xl transition-all duration-300 text-left overflow-hidden"
+            >
+              {/* Gradient background on hover */}
+              <div
+                className={`absolute inset-0 bg-gradient-to-br ${option.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
+              ></div>
 
-        {/* Blog Post */}
-        <div
-          onClick={handleCreateBlogPost}
-          className="bg-gray-50 rounded-lg p-4 flex flex-col hover:bg-purple-50 hover:shadow-md transition-all duration-300 cursor-pointer"
-        >
-          <div className="flex items-center space-x-3 mb-2">
-            <BookOpen className="w-5 h-5 text-[#5247bf]" />
-            <h3 className="font-semibold text-gray-800">Blog Post</h3>
-          </div>
-          <p className="text-xs text-gray-500 pl-8">SEO-optimized articles</p>
-          <button className="mt-3 self-end bg-[#5247bf] text-white px-3 py-1 text-sm rounded-lg hover:bg-[#4238a6] transition-all duration-200">
-            Create
-          </button>
-        </div>
+              {/* Content */}
+              <div className="relative z-10">
+                {/* Icon */}
+                <div className="mb-4 inline-flex items-center justify-center w-12 h-12 rounded-lg bg-gray-100 group-hover:bg-white/20 transition-colors duration-300">
+                  <Icon className="w-6 h-6 text-[#5247bf] group-hover:text-white transition-colors duration-300" />
+                </div>
 
-        {/* Generate Images */}
-        <div
-          onClick={handleCreateImages}
-          className="bg-gray-50 rounded-lg p-4 flex flex-col hover:bg-purple-50 hover:shadow-md transition-all duration-300 cursor-pointer"
-        >
-          <div className="flex items-center space-x-3 mb-2">
-            <Image className="w-5 h-5 text-[#5247bf]" />
-            <h3 className="font-semibold text-gray-800">Generate Images</h3>
-          </div>
-          <p className="text-xs text-gray-500 pl-8">AI-powered visuals</p>
-          <button className="mt-3 self-end bg-[#5247bf] text-white px-3 py-1 text-sm rounded-lg hover:bg-[#4238a6] transition-all duration-200">
-            Create
-          </button>
-        </div>
+                {/* Title */}
+                <h3 className="text-lg font-semibold text-gray-900 group-hover:text-white transition-colors duration-300 mb-2">
+                  {option.title}
+                </h3>
+
+                {/* Description */}
+                <p className="text-sm text-gray-600 group-hover:text-white/90 transition-colors duration-300 mb-4">
+                  {option.description}
+                </p>
+
+                {/* Arrow */}
+                <div className="flex items-center text-[#5247bf] group-hover:text-white transition-colors duration-300">
+                  <span className="text-sm font-medium mr-2">Get started</span>
+                  <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" />
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -5,7 +5,6 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   updateProfile,
-  sendEmailVerification,
   sendPasswordResetEmail,
 } from "firebase/auth";
 import {
@@ -15,8 +14,9 @@ import {
   serverTimestamp,
   getDoc,
   updateDoc,
-  increment,
 } from "firebase/firestore";
+import { useNavigate, useLocation } from "react-router-dom";
+import { toast } from "react-toastify";
 
 const UserContext = createContext();
 
@@ -24,53 +24,49 @@ export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Listen to auth state changes
+  // Auth state listener
   useEffect(() => {
-    const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       setUser(currentUser);
       setLoading(false);
-      setError(null);
-      if (!currentUser) {
-        setUserData(null);
-      }
+      if (!currentUser) setUserData(null);
     });
-    return () => unsubscribeAuth();
+    return () => unsubscribe();
   }, []);
 
-  // Listen to user data when authenticated
+  // User data listener
   useEffect(() => {
     if (!user) return;
 
     const userDocRef = doc(db, "users", user.uid);
-    const unsubscribeSnapshot = onSnapshot(
+    const unsubscribe = onSnapshot(
       userDocRef,
       (doc) => {
         if (doc.exists()) {
-          setUserData({ id: doc.id, ...doc.data() });
+          const data = { id: doc.id, ...doc.data() };
+          setUserData(data);
         } else {
           setUserData(null);
+          if (location.pathname !== "/signup") {
+            navigate("/login");
+          }
         }
       },
       (err) => {
-        console.error("Error in snapshot listener:", err);
-        setError("Failed to fetch user data: " + err.message);
+        console.error("Snapshot error:", err);
+        toast.error("Failed to fetch user data");
         setUserData(null);
       }
     );
+    return () => unsubscribe();
+  }, [user, location.pathname, navigate]);
 
-    return () => unsubscribeSnapshot();
-  }, [user]);
-
-  const signupWithEmail = async (
-    name,
-    email,
-    password,
-    phoneNumber,
-    referrerId = null
-  ) => {
+  const signupWithEmail = async (name, email, password, phoneNumber) => {
     try {
+      // Create Firebase Auth user
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -78,45 +74,35 @@ export function UserProvider({ children }) {
       );
       const newUser = userCredential.user;
 
-      await sendEmailVerification(newUser);
+      // Update display name
       await updateProfile(newUser, { displayName: name });
+
+      // Create user document with 30-day free trial
+      const trialEndDate = new Date();
+      trialEndDate.setDate(trialEndDate.getDate() + 30);
 
       const userDocRef = doc(db, "users", newUser.uid);
       const userDocData = {
         name,
         email,
         phoneNumber,
-        referredBy: referrerId,
-        earnings: 0,
-        downlineEarnings: 0,
         createdAt: serverTimestamp(),
         subscription: {
-          plan: "Free",
-          status: "active",
-          startDate: serverTimestamp(),
-          contentPlans: 0,
-          contentStrategies: 0,
-          blogPosts: 0,
-          imageGenerations: 0,
-          month: new Date().toISOString().slice(0, 7), // YYYY-MM format
+          status: "trial", // "trial" | "active" | "pending" | "expired"
+          plan: "Free Trial",
+          trialEndDate: trialEndDate.toISOString(),
+          trialStartDate: new Date().toISOString(),
+          activationDate: null,
+          expiryDate: null,
         },
       };
 
       await setDoc(userDocRef, userDocData);
 
-      // Update referrer's downline if applicable
-      if (referrerId) {
-        const referrerRef = doc(db, "users", referrerId);
-        await updateDoc(referrerRef, {
-          referrals: increment(1),
-        });
-      }
-
-      // Wait for document creation
+      // Wait for document to be created
       await new Promise((resolve) => {
         const checkDoc = async () => {
-          const docSnap = await getDoc(userDocRef);
-          if (docSnap.exists()) resolve();
+          if ((await getDoc(userDocRef)).exists()) resolve();
           else setTimeout(checkDoc, 500);
         };
         checkDoc();
@@ -124,9 +110,15 @@ export function UserProvider({ children }) {
 
       setUserData({ id: userDocRef.id, ...userDocData });
       setUser(newUser);
+      toast.success("Account created! You have 30 days free trial.");
+      navigate("/dashboard");
       return newUser;
     } catch (err) {
-      throw new Error("Failed to sign up: " + err.message);
+      // Clean up if signup fails
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+      throw new Error(err.message || "Signup failed");
     }
   };
 
@@ -138,57 +130,29 @@ export function UserProvider({ children }) {
         password
       );
       const loggedInUser = userCredential.user;
-
-      if (!loggedInUser.emailVerified) {
-        await signOut(auth);
-        throw new Error(
-          "Please verify your email before logging in. Check your inbox for a verification link."
-        );
-      }
-
-      // Check if we need to reset monthly usage counters
-      const currentMonth = new Date().toISOString().slice(0, 7);
       const userDoc = await getDoc(doc(db, "users", loggedInUser.uid));
 
-      if (
-        userDoc.exists() &&
-        userDoc.data().subscription.month !== currentMonth
-      ) {
-        await updateDoc(doc(db, "users", loggedInUser.uid), {
-          "subscription.contentPlans": 0,
-          "subscription.contentStrategies": 0,
-          "subscription.blogPosts": 0,
-          "subscription.imageGenerations": 0,
-          "subscription.month": currentMonth,
-        });
+      if (!userDoc.exists()) {
+        await signOut(auth);
+        throw new Error("Account not found");
       }
 
       setUser(loggedInUser);
+      toast.success("Logged in successfully!");
+      navigate("/dashboard");
       return loggedInUser;
     } catch (err) {
-      throw new Error(err.message);
-    }
-  };
-
-  const incrementUsage = async (type) => {
-    if (!user) return;
-
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      await updateDoc(userDocRef, {
-        [`subscription.${type}`]: increment(1),
-      });
-    } catch (err) {
-      console.error("Failed to increment usage counter:", err);
+      throw new Error(err.message || "Login failed");
     }
   };
 
   const sendPasswordReset = async (email) => {
     try {
       await sendPasswordResetEmail(auth, email);
-      return "Password reset email sent. Check your inbox.";
+      toast.success("Password reset email sent!");
+      return "Password reset email sent.";
     } catch (err) {
-      throw new Error("Failed to send password reset email: " + err.message);
+      throw new Error(err.message || "Password reset failed");
     }
   };
 
@@ -197,10 +161,27 @@ export function UserProvider({ children }) {
       await signOut(auth);
       setUser(null);
       setUserData(null);
-      setError(null);
+      navigate("/login");
+      toast.success("Logged out successfully");
     } catch (err) {
-      throw new Error("Failed to log out: " + err.message);
+      throw new Error(err.message || "Logout failed");
     }
+  };
+
+  // Check if user has access to create receipts/invoices/records
+  const hasAccessToCreate = () => {
+    if (!userData || !userData.subscription) return false;
+
+    const status = userData.subscription.status;
+
+    if (status === "active") return true;
+
+    if (status === "trial") {
+      const trialEnd = new Date(userData.subscription.trialEndDate);
+      return new Date() <= trialEnd;
+    }
+
+    return false;
   };
 
   return (
@@ -212,9 +193,8 @@ export function UserProvider({ children }) {
         signupWithEmail,
         sendPasswordReset,
         logout,
-        incrementUsage,
         loading,
-        error,
+        hasAccessToCreate,
       }}
     >
       {children}

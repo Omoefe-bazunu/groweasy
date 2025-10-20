@@ -95,9 +95,18 @@ const Dashboard = () => {
 
   if (loading || !userData) {
     return (
-      <div className="min-h-screen bg-cover bg-center bg-no-repeat p-6 flex items-center justify-center">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#5247bf]"></div>
-      </div>
+      <section
+        id="blog-details-loading"
+        className="flex flex-col items-center justify-center min-h-screen bg-white py-20"
+      >
+        <div className="flex flex-col items-center justify-center">
+          <div className="flex space-x-2">
+            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse"></span>
+            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-200"></span>
+            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-400"></span>
+          </div>
+        </div>
+      </section>
     );
   }
 
@@ -154,7 +163,8 @@ const Dashboard = () => {
                 <p>
                   Earn by referring people to sign up and ugrade their plans
                   from the Free Plan
-                  <br /> 20% from your downline; 5% from downline's referral{" "}
+                  <br /> 20% from your downline; 5% from downline's
+                  referral{" "}
                 </p>
                 <label className="block text-gray-700 font-medium mb-1 mt-4">
                   Affiliate Link:
@@ -223,7 +233,7 @@ const Dashboard = () => {
           <FileText className="w-8 h-8 text-[#5247bf]" />
           <div className="flex-1">
             <h2 className="text-sm lg:text-xl font-semibold text-gray-800">
-              View your Creations
+              Business Tools
             </h2>
           </div>
           <button className="bg-[#5247bf] w-24 text-white px-4 py-2 rounded-lg hover:bg-[#4238a6]">
@@ -238,7 +248,7 @@ const Dashboard = () => {
           <User className="w-8 h-8 text-[#5247bf]" />
           <div className="flex-1">
             <h2 className="text-sm lg:text-xl font-semibold text-gray-800">
-              Build Business Profile
+              Business Profile
             </h2>
             {profileExists && (
               <p className="text-gray-600 text-sm mt-1">Profile Created</p>
@@ -256,7 +266,7 @@ const Dashboard = () => {
           <File className="w-8 h-8 text-[#5247bf]" />
           <div className="flex-1">
             <h2 className="text-sm lg:text-xl font-semibold text-gray-800">
-              View Required Documents
+              Business Legal Documents
             </h2>
           </div>
           <button className="bg-[#5247bf] w-24 text-white px-4 py-2 rounded-lg hover:bg-[#4238a6]">
