@@ -89,6 +89,16 @@ const InvoicesList = () => {
             .includes(searchText.toLowerCase()) ||
           invoice.clientOccupation
             ?.toLowerCase()
+            .includes(searchText.toLowerCase()) ||
+          invoice.accountName
+            ?.toLowerCase()
+            .includes(searchText.toLowerCase()) ||
+          invoice.accountNumber
+            ?.toLowerCase()
+            .includes(searchText.toLowerCase()) ||
+          invoice.bankName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          invoice.signatureName
+            ?.toLowerCase()
             .includes(searchText.toLowerCase())
       );
     }
@@ -201,9 +211,9 @@ const InvoicesList = () => {
   const generateInvoiceHTML = (invoice) => {
     return `
       <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 4px solid black; padding-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid ${invoice.brandColor || "#000"}; padding-bottom: 16px;">
           <div style="flex: 1;">
-            <h1 style="font-size: 24px; font-weight: bold; color: black; margin: 0;">
+            <h1 style="font-size: 24px; font-weight: bold; color: ${invoice.brandColor || "#000"}; margin: 0;">
               ${invoice.businessName || "Business Name"}
             </h1>
             <p style="font-size: 14px; color: #666; margin: 4px 0;">
@@ -221,7 +231,7 @@ const InvoicesList = () => {
             }
           </div>
           <div style="text-align: right;">
-            <h2 style="font-size: 20px; font-weight: bold; color: black; margin: 0;">INVOICE</h2>
+            <h2 style="font-size: 20px; font-weight: bold; color: ${invoice.brandColor || "#000"}; margin: 0;">INVOICE</h2>
             ${
               invoice.invoiceNumber
                 ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">#${invoice.invoiceNumber}</p>`
@@ -264,9 +274,34 @@ const InvoicesList = () => {
             : ""
         }
 
+        ${
+          invoice.accountName || invoice.accountNumber || invoice.bankName
+            ? `
+          <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
+            <h3 style="font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">BANK DETAILS</h3>
+            ${
+              invoice.accountName
+                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Name:</span> ${invoice.accountName}</p>`
+                : ""
+            }
+            ${
+              invoice.accountNumber
+                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Number:</span> ${invoice.accountNumber}</p>`
+                : ""
+            }
+            ${
+              invoice.bankName
+                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Bank Name:</span> ${invoice.bankName}</p>`
+                : ""
+            }
+          </div>
+        `
+            : ""
+        }
+
         <table style="width: 100%; font-size: 14px; margin-bottom: 16px; border-collapse: collapse;">
           <thead>
-            <tr style="background-color: black; color: white;">
+            <tr style="background-color: ${invoice.brandColor || "#000"}; color: white;">
               <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Description</th>
               <th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Qty</th>
               <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Unit Price</th>
@@ -310,7 +345,7 @@ const InvoicesList = () => {
           <tfoot>
             <tr style="background-color: #f5f5f5;">
               <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total Due:</td>
-              <td style="padding: 8px; text-align: right; font-weight: bold; color: black; border: 1px solid #ddd;">₦${parseFloat(invoice.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding: 8px; text-align: right; font-weight: bold; color: ${invoice.brandColor || "#000"}; border: 1px solid #ddd;">₦${parseFloat(invoice.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
             ${
               invoice.dueDate
@@ -326,10 +361,10 @@ const InvoicesList = () => {
         </table>
 
         ${
-          invoice.signatureName
+          invoice.signatureName || invoice.signatoryPosition
             ? `
           <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #ddd;">
-            <p style="font-size: 14px; font-weight: 600; margin: 0;">${invoice.signatureName}</p>
+            <p style="font-size: 14px; font-weight: 600; margin: 0;">${invoice.signatureName || ""}</p>
             <p style="font-size: 12px; color: #666; margin: 4px 0;">${invoice.signatoryPosition || ""}</p>
           </div>
         `
@@ -381,7 +416,7 @@ const InvoicesList = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search by business name, invoice number, client info..."
+                placeholder="Search by business name, invoice number, client info, bank details, or signatory..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -425,7 +460,8 @@ const InvoicesList = () => {
             {filteredInvoices.map((invoice) => (
               <div
                 key={invoice.id}
-                className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden border-t-4 border-blue-600"
+                className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden border-t-4"
+                style={{ borderColor: invoice.brandColor || "#5247bf" }}
               >
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
@@ -462,7 +498,10 @@ const InvoicesList = () => {
                           .length || 0}{" "}
                         item(s)
                       </span>
-                      <span className="text-lg font-bold text-[#5247bf]">
+                      <span
+                        className="text-lg font-bold"
+                        style={{ color: invoice.brandColor || "#5247bf" }}
+                      >
                         ₦{formatCurrency(invoice.total)}
                       </span>
                     </div>
@@ -470,6 +509,31 @@ const InvoicesList = () => {
                       <div className="text-sm">
                         <span className="text-gray-600">Due: </span>
                         <span className="font-semibold">{invoice.dueDate}</span>
+                      </div>
+                    )}
+                    {(invoice.accountName ||
+                      invoice.accountNumber ||
+                      invoice.bankName) && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Bank Details: </span>
+                        <span className="font-semibold">
+                          {invoice.accountName || ""}{" "}
+                          {invoice.accountNumber || ""} {invoice.bankName || ""}
+                        </span>
+                      </div>
+                    )}
+                    {invoice.signatureName && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Signed by: </span>
+                        <span className="font-semibold">
+                          {invoice.signatureName}
+                        </span>
+                        {invoice.signatoryPosition && (
+                          <span className="text-gray-500">
+                            {" "}
+                            ({invoice.signatoryPosition})
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>

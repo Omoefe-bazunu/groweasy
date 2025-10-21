@@ -23,6 +23,7 @@ const ReceiptCreator = () => {
     signatureName: "",
     signatoryPosition: "",
     amountPaid: "",
+    paymentMethod: "",
     dueDate: "",
     interestRate: "",
   });
@@ -123,6 +124,7 @@ const ReceiptCreator = () => {
         signatoryPosition: formData.signatoryPosition,
         total: calculateTotal(),
         amountPaid: formData.amountPaid || "",
+        paymentMethod: formData.paymentMethod || "",
         dueDate: formData.dueDate || "",
         interestRate: formData.interestRate || "",
         createdAt: serverTimestamp(),
@@ -150,6 +152,7 @@ const ReceiptCreator = () => {
         signatureName: "",
         signatoryPosition: "",
         amountPaid: "",
+        paymentMethod: "",
         dueDate: "",
         interestRate: "",
       });
@@ -182,6 +185,7 @@ const ReceiptCreator = () => {
       signatureName: "",
       signatoryPosition: "",
       amountPaid: "",
+      paymentMethod: "",
       dueDate: "",
       interestRate: "",
     });
@@ -417,7 +421,7 @@ const ReceiptCreator = () => {
               <h3 className="text-lg font-semibold text-gray-900">
                 Payment Details (Optional)
               </h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <input
                   type="number"
                   name="amountPaid"
@@ -426,24 +430,43 @@ const ReceiptCreator = () => {
                   onChange={handleInputChange}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
                 />
+                <select
+                  name="paymentMethod"
+                  value={formData.paymentMethod}
+                  onChange={handleInputChange}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                >
+                  <option value="">Select Payment Method</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank">Bank</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Due Date for Balance Payment (Optional)
+                </label>
                 <input
                   type="date"
                   name="dueDate"
-                  placeholder="Due Date"
                   value={formData.dueDate}
                   onChange={handleInputChange}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
                 />
               </div>
-              <input
-                type="number"
-                name="interestRate"
-                placeholder="Interest Rate (%) - Optional"
-                value={formData.interestRate}
-                onChange={handleInputChange}
-                step="0.01"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Interest Rate (%) - Optional
+                </label>
+                <input
+                  type="number"
+                  name="interestRate"
+                  placeholder="Annual interest rate for overdue balance"
+                  value={formData.interestRate}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                />
+              </div>
             </div>
 
             <div className="pt-4 border-t space-y-4">
@@ -621,6 +644,11 @@ const ReceiptCreator = () => {
                         {formData.amountPaid
                           ? `₦${formatCurrency(formData.amountPaid)}`
                           : "-"}
+                        {formData.paymentMethod && formData.amountPaid && (
+                          <span className="text-xs text-gray-600 block">
+                            ({formData.paymentMethod})
+                          </span>
+                        )}
                       </td>
                     </tr>
                     <tr>
@@ -638,6 +666,16 @@ const ReceiptCreator = () => {
                         </td>
                         <td className="p-2 text-right font-bold">
                           {formData.dueDate}
+                        </td>
+                      </tr>
+                    )}
+                    {formData.interestRate && (
+                      <tr>
+                        <td colSpan="5" className="p-2 text-right font-bold">
+                          Interest Rate on default:
+                        </td>
+                        <td className="p-2 text-right font-bold">
+                          {formData.interestRate}%
                         </td>
                       </tr>
                     )}

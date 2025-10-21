@@ -29,6 +29,14 @@ const CreateOptions = ({ onClose }) => {
       gradient: "from-indigo-500 to-indigo-600",
       hoverGradient: "from-indigo-600 to-indigo-700",
     },
+    {
+      title: "Business Tasks",
+      description: "Plan your business tasks",
+      icon: FileText,
+      path: "/tasks",
+      gradient: "from-indigo-500 to-indigo-600",
+      hoverGradient: "from-indigo-600 to-indigo-700",
+    },
   ];
 
   const handleNavigate = (path) => {

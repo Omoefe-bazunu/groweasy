@@ -15,6 +15,7 @@ const InvoiceCreator = () => {
     contactNumber: "",
     date: new Date().toISOString().split("T")[0],
     invoiceNumber: "",
+    brandColor: "#5247bf",
     clientName: "",
     clientContact: "",
     clientLocation: "",
@@ -28,6 +29,9 @@ const InvoiceCreator = () => {
     signatureName: "",
     signatoryPosition: "",
     dueDate: "",
+    accountName: "",
+    accountNumber: "",
+    bankName: "",
   });
 
   const handleInputChange = (e) => {
@@ -94,6 +98,7 @@ const InvoiceCreator = () => {
         contactNumber: formData.contactNumber,
         date: formData.date,
         invoiceNumber: formData.invoiceNumber,
+        brandColor: formData.brandColor,
         clientName: formData.clientName,
         clientContact: formData.clientContact,
         clientLocation: formData.clientLocation,
@@ -104,6 +109,9 @@ const InvoiceCreator = () => {
         signatureName: formData.signatureName,
         signatoryPosition: formData.signatoryPosition,
         dueDate: formData.dueDate || "",
+        accountName: formData.accountName || "",
+        accountNumber: formData.accountNumber || "",
+        bankName: formData.bankName || "",
         total: calculateTotal(),
         createdAt: serverTimestamp(),
       };
@@ -117,6 +125,7 @@ const InvoiceCreator = () => {
         contactNumber: "",
         date: new Date().toISOString().split("T")[0],
         invoiceNumber: "",
+        brandColor: "#5247bf",
         clientName: "",
         clientContact: "",
         clientLocation: "",
@@ -130,6 +139,9 @@ const InvoiceCreator = () => {
         signatureName: "",
         signatoryPosition: "",
         dueDate: "",
+        accountName: "",
+        accountNumber: "",
+        bankName: "",
       });
     } catch (error) {
       console.error("Error saving invoice:", error);
@@ -147,6 +159,7 @@ const InvoiceCreator = () => {
       contactNumber: "",
       date: new Date().toISOString().split("T")[0],
       invoiceNumber: "",
+      brandColor: "#5247bf",
       clientName: "",
       clientContact: "",
       clientLocation: "",
@@ -160,6 +173,9 @@ const InvoiceCreator = () => {
       signatureName: "",
       signatoryPosition: "",
       dueDate: "",
+      accountName: "",
+      accountNumber: "",
+      bankName: "",
     });
     toast.info("Form cleared");
   };
@@ -263,6 +279,21 @@ const InvoiceCreator = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Brand Color
+                </label>
+                <input
+                  type="color"
+                  name="brandColor"
+                  value={formData.brandColor}
+                  onChange={handleInputChange}
+                  className="w-full h-12 border border-gray-300 rounded-lg cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Invoice Number
@@ -409,6 +440,50 @@ const InvoiceCreator = () => {
             </div>
 
             <div className="pt-4 border-t space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Bank Details (Optional)
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Account Name
+                  </label>
+                  <input
+                    type="text"
+                    name="accountName"
+                    value={formData.accountName}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Account Number
+                  </label>
+                  <input
+                    type="text"
+                    name="accountNumber"
+                    value={formData.accountNumber}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Bank Name
+                  </label>
+                  <input
+                    type="text"
+                    name="bankName"
+                    value={formData.bankName}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">Signatory</h3>
               <div className="grid grid-cols-2 gap-4">
                 <input
@@ -441,9 +516,15 @@ const InvoiceCreator = () => {
               className="bg-white p-8 border border-gray-200 rounded-lg"
             >
               {/* Header */}
-              <div className="flex justify-between items-start mb-6 border-b-4 border-black pb-4">
+              <div
+                className="flex justify-between items-start mb-6 pb-4"
+                style={{ borderBottom: `3px solid ${formData.brandColor}` }}
+              >
                 <div className="flex-1">
-                  <h1 className="text-2xl font-bold text-black">
+                  <h1
+                    className="text-2xl font-bold"
+                    style={{ color: formData.brandColor }}
+                  >
                     {formData.businessName || "Business Name"}
                   </h1>
                   <p className="text-sm text-gray-600 mt-1">
@@ -461,7 +542,12 @@ const InvoiceCreator = () => {
                   )}
                 </div>
                 <div className="text-right">
-                  <h2 className="text-xl font-bold text-black">INVOICE</h2>
+                  <h2
+                    className="text-xl font-bold"
+                    style={{ color: formData.brandColor }}
+                  >
+                    INVOICE
+                  </h2>
                   {formData.invoiceNumber && (
                     <p className="text-sm text-gray-600 mt-1">
                       #{formData.invoiceNumber}
@@ -476,7 +562,8 @@ const InvoiceCreator = () => {
               {/* Client Information */}
               {(formData.clientName ||
                 formData.clientContact ||
-                formData.clientLocation) && (
+                formData.clientLocation ||
+                formData.clientOccupation) && (
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">
                     CLIENT INFORMATION
@@ -512,7 +599,12 @@ const InvoiceCreator = () => {
               <div className="overflow-x-auto">
                 <table className="min-w-[600px] w-full text-sm">
                   <thead>
-                    <tr className="bg-black text-white">
+                    <tr
+                      style={{
+                        backgroundColor: formData.brandColor,
+                        color: "white",
+                      }}
+                    >
                       <th className="p-2 text-left">Description</th>
                       <th className="p-2 text-center">Qty</th>
                       <th className="p-2 text-right">Unit Price</th>
@@ -552,11 +644,14 @@ const InvoiceCreator = () => {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-gray-100">
+                    <tr style={{ backgroundColor: `${formData.brandColor}20` }}>
                       <td colSpan="5" className="p-2 text-right font-bold">
                         Total Due:
                       </td>
-                      <td className="p-2 text-right font-bold text-black">
+                      <td
+                        className="p-2 text-right font-bold"
+                        style={{ color: formData.brandColor }}
+                      >
                         ₦{formatCurrency(calculateTotal())}
                       </td>
                     </tr>
@@ -576,6 +671,35 @@ const InvoiceCreator = () => {
                   </tfoot>
                 </table>
               </div>
+
+              {/* Bank Details */}
+              {(formData.accountName ||
+                formData.accountNumber ||
+                formData.bankName) && (
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    BANK DETAILS
+                  </h3>
+                  {formData.accountName && (
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Account Name:</span>{" "}
+                      {formData.accountName}
+                    </p>
+                  )}
+                  {formData.accountNumber && (
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Account Number:</span>{" "}
+                      {formData.accountNumber}
+                    </p>
+                  )}
+                  {formData.bankName && (
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Bank Name:</span>{" "}
+                      {formData.bankName}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Signatory */}
               {formData.signatureName && (

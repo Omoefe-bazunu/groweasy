@@ -80,7 +80,13 @@ const ReceiptsList = () => {
             .includes(searchText.toLowerCase()) ||
           receipt.items?.some((item) =>
             item.details?.toLowerCase().includes(searchText.toLowerCase())
-          )
+          ) ||
+          receipt.paymentMethod
+            ?.toLowerCase()
+            .includes(searchText.toLowerCase()) ||
+          receipt.signatureName
+            ?.toLowerCase()
+            .includes(searchText.toLowerCase())
       );
     }
 
@@ -224,15 +230,15 @@ const ReceiptsList = () => {
 
   const generateReceiptHTML = (receipt) => {
     return `
-     <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid black; padding-bottom: 16px;">
+      <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid ${receipt.brandColor || "#000"}; padding-bottom: 16px;">
           <div style="flex: 1;">
             ${
               receipt.businessLogo
                 ? `<img src="${receipt.businessLogo}" alt="Logo" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 8px;" />`
                 : ""
             }
-            <h1 style="font-size: 24px; font-weight: bold; color: black; margin: 0;">
+            <h1 style="font-size: 24px; font-weight: bold; color: ${receipt.brandColor || "#000"}; margin: 0;">
               ${receipt.businessName || "Business Name"}
             </h1>
             <p style="font-size: 14px; color: #666; margin: 4px 0;">
@@ -250,13 +256,16 @@ const ReceiptsList = () => {
             }
           </div>
           <div style="text-align: right;">
-            <h2 style="font-size: 20px; font-weight: bold; color: black; margin: 0;">RECEIPT</h2>
+            <h2 style="font-size: 20px; font-weight: bold; color: ${receipt.brandColor || "#000"}; margin: 0;">RECEIPT</h2>
             <p style="font-size: 14px; color: #666; margin: 4px 0;">Date: ${receipt.date}</p>
           </div>
         </div>
 
         ${
-          receipt.clientName || receipt.clientContact || receipt.clientLocation
+          receipt.clientName ||
+          receipt.clientContact ||
+          receipt.clientLocation ||
+          receipt.clientOccupation
             ? `
           <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
             <h3 style="font-size: 14px; font-weight: bold; color: #333; margin: 0 0 8px 0;">CLIENT INFORMATION</h3>
@@ -287,7 +296,7 @@ const ReceiptsList = () => {
 
         <table style="width: 100%; font-size: 14px; margin-bottom: 16px; border-collapse: collapse;">
           <thead>
-            <tr style="background-color: black; color: white;">
+            <tr style="background-color: ${receipt.brandColor || "#000"}; color: white;">
               <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Details</th>
               <th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Qty</th>
               <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Unit Price</th>
@@ -331,15 +340,18 @@ const ReceiptsList = () => {
           <tfoot>
             <tr style="background-color: #f5f5f5;">
               <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total:</td>
-              <td style="padding: 8px; text-align: right; font-weight: bold; color: black; border: 1px solid #ddd;">₦${parseFloat(receipt.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding: 8px; text-align: right; font-weight: bold; color: ${receipt.brandColor || "#000"}; border: 1px solid #ddd;">₦${parseFloat(receipt.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
             <tr>
               <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Amount Paid:</td>
-              <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">₦${parseFloat(receipt.amountPaid || "0.00").toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">
+                ₦${parseFloat(receipt.amountPaid || "0.00").toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${receipt.paymentMethod ? `<span style="display: block; font-size: 12px; color: #666;">(${receipt.paymentMethod})</span>` : ""}
+              </td>
             </tr>
             <tr style="background-color: #f5f5f5;">
               <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Balance Outstanding:</td>
-              <td style="padding: 8px; text-align: right; font-weight: bold; color: black; border: 1px solid #ddd;">₦${parseFloat(calculateBalance(receipt.total, receipt.amountPaid)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding: 8px; text-align: right; font-weight: bold; color: ${receipt.brandColor || "#000"}; border: 1px solid #ddd;">₦${parseFloat(calculateBalance(receipt.total, receipt.amountPaid)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
             ${
               receipt.dueDate
@@ -352,7 +364,17 @@ const ReceiptsList = () => {
                 : ""
             }
             ${
-              receipt.interestRate && calculateInterestCharges(receipt) > 0
+              receipt.interestRate
+                ? `
+              <tr>
+                <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Interest Rate:</td>
+                <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">${receipt.interestRate}%</td>
+              </tr>
+            `
+                : ""
+            }
+            ${
+              receipt.interestRate && calculateInterestCharges(recept) > 0
                 ? `
               <tr>
                 <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Interest Charges:</td>
@@ -365,7 +387,7 @@ const ReceiptsList = () => {
         </table>
 
         ${
-          receipt.signatureName
+          receipt.signatureName || receipt.signatoryPosition
             ? `
           <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #ddd;">
             ${
@@ -373,7 +395,7 @@ const ReceiptsList = () => {
                 ? `<img src="${receipt.signature}" alt="Signature" style="width: 128px; height: 64px; object-fit: contain; margin-bottom: 8px;" />`
                 : ""
             }
-            <p style="font-size: 14px; font-weight: 600; margin: 0;">${receipt.signatureName}</p>
+            <p style="font-size: 14px; font-weight: 600; margin: 0;">${receipt.signatureName || ""}</p>
             <p style="font-size: 12px; color: #666; margin: 4px 0;">${receipt.signatoryPosition || ""}</p>
           </div>
         `
@@ -425,7 +447,7 @@ const ReceiptsList = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search by business name, client, address, or items..."
+                placeholder="Search by business name, client, address, items, payment method, or signatory..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -469,7 +491,8 @@ const ReceiptsList = () => {
             {filteredReceipts.map((receipt) => (
               <div
                 key={receipt.id}
-                className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden border-t-4 border-blue-600"
+                className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow overflow-hidden border-t-4"
+                style={{ borderColor: receipt.brandColor || "#5247bf" }}
               >
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
@@ -506,7 +529,10 @@ const ReceiptsList = () => {
                           0}{" "}
                         item(s)
                       </span>
-                      <span className="text-lg font-bold text-blue-600">
+                      <span
+                        className="text-lg font-bold"
+                        style={{ color: receipt.brandColor || "#5247bf" }}
+                      >
                         ₦
                         {parseFloat(receipt.total).toLocaleString("en-NG", {
                           minimumFractionDigits: 2,
@@ -526,6 +552,53 @@ const ReceiptsList = () => {
                         })}
                       </span>
                     </div>
+                    {receipt.paymentMethod && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Payment Method: </span>
+                        <span className="font-semibold">
+                          {receipt.paymentMethod}
+                        </span>
+                      </div>
+                    )}
+                    {receipt.dueDate && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Due Date: </span>
+                        <span className="font-semibold">{receipt.dueDate}</span>
+                      </div>
+                    )}
+                    {receipt.interestRate && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Interest Rate: </span>
+                        <span className="font-semibold">
+                          {receipt.interestRate}%
+                        </span>
+                      </div>
+                    )}
+                    {receipt.interestRate &&
+                      calculateInterestCharges(receipt) > 0 && (
+                        <div className="text-sm">
+                          <span className="text-gray-600">
+                            Interest Charges:{" "}
+                          </span>
+                          <span className="font-semibold">
+                            ₦{formatCurrency(calculateInterestCharges(receipt))}
+                          </span>
+                        </div>
+                      )}
+                    {receipt.signatureName && (
+                      <div className="text-sm">
+                        <span className="text-gray-600">Signed by: </span>
+                        <span className="font-semibold">
+                          {receipt.signatureName}
+                        </span>
+                        {receipt.signatoryPosition && (
+                          <span className="text-gray-500">
+                            {" "}
+                            ({receipt.signatoryPosition})
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 border-t border-gray-200 flex gap-2">
@@ -551,7 +624,7 @@ const ReceiptsList = () => {
                         downloading === receipt.id || deleting === receipt.id
                       }
                       className="flex items-center justify-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 text-sm font-medium py-2 px-3 rounded transition-colors disabled:opacity-50"
-                      title="Delete invoice"
+                      title="Delete receipt"
                     >
                       <Trash2 className="w-4 h-4" />
                       {deleting === receipt.id ? "..." : ""}

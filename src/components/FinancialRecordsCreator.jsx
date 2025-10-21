@@ -36,6 +36,7 @@ const FinancialRecordsCreator = () => {
     details: "",
     inflow: "",
     outflow: "",
+    paymentMethod: "Cash",
   });
 
   useEffect(() => {
@@ -102,7 +103,6 @@ const FinancialRecordsCreator = () => {
     const grouped = {};
     let runningBalance = 0;
 
-    // Sort records by date ascending for balance calculation
     const sortedRecords = [...records].sort(
       (a, b) => new Date(a.date) - new Date(b.date)
     );
@@ -139,8 +139,8 @@ const FinancialRecordsCreator = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.date || !formData.details) {
-      toast.error("Date and details are required");
+    if (!formData.date || !formData.details || !formData.paymentMethod) {
+      toast.error("Date, details, and payment method are required");
       return;
     }
 
@@ -156,6 +156,7 @@ const FinancialRecordsCreator = () => {
         details: formData.details,
         inflow: parseFloat(formData.inflow) || 0,
         outflow: parseFloat(formData.outflow) || 0,
+        paymentMethod: formData.paymentMethod,
         weekId: getWeekIdentifier(formData.date),
         createdAt: serverTimestamp(),
       };
@@ -178,6 +179,7 @@ const FinancialRecordsCreator = () => {
         details: "",
         inflow: "",
         outflow: "",
+        paymentMethod: "Cash",
       });
       fetchRecords();
     } catch (error) {
@@ -193,6 +195,7 @@ const FinancialRecordsCreator = () => {
       details: record.details,
       inflow: record.inflow || "",
       outflow: record.outflow || "",
+      paymentMethod: record.paymentMethod || "Cash",
     });
     setIsModalOpen(true);
   };
@@ -217,8 +220,16 @@ const FinancialRecordsCreator = () => {
       details: "",
       inflow: "",
       outflow: "",
+      paymentMethod: "Cash",
     });
     setIsModalOpen(true);
+  };
+
+  const formatCurrency = (value) => {
+    return parseFloat(value).toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   };
 
   if (loading) {
@@ -241,7 +252,6 @@ const FinancialRecordsCreator = () => {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-600 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
@@ -258,7 +268,6 @@ const FinancialRecordsCreator = () => {
           </button>
         </div>
 
-        {/* Records by Week */}
         {Object.keys(groupedRecords).length === 0 ? (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
             <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -288,7 +297,6 @@ const FinancialRecordsCreator = () => {
                     key={weekId}
                     className="bg-white rounded-xl shadow-md overflow-hidden"
                   >
-                    {/* Week Header */}
                     <div className="bg-gradient-to-r from-[#5247bf] to-[#4238a6] p-4 md:p-6">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                         <div>
@@ -300,24 +308,25 @@ const FinancialRecordsCreator = () => {
                           </p>
                         </div>
                         <div className="grid grid-cols-3 gap-3 md:gap-4">
-                          <div className="bg-white/10 backdrop-blur rounded-lg p-3">
-                            <p className="text-white/70 text-xs mb-1">Inflow</p>
-                            <p className="text-green-300 font-bold text-sm md:text-base">
-                              ${weekData.totalInflow.toFixed(2)}
+                          <div className="bg-gray-50 backdrop-blur rounded-lg p-3">
+                            <p className="text-gray-600 text-xs mb-1">Inflow</p>
+                            <p className="text-green-600 font-bold text-sm md:text-base">
+                              ₦{formatCurrency(weekData.totalInflow.toFixed(2))}
                             </p>
                           </div>
-                          <div className="bg-white/10 backdrop-blur rounded-lg p-3">
-                            <p className="text-white/70 text-xs mb-1">
+                          <div className="bg-gray-50 backdrop-blur rounded-lg p-3">
+                            <p className="text-gray-600 text-xs mb-1">
                               Outflow
                             </p>
-                            <p className="text-red-300 font-bold text-sm md:text-base">
-                              ${weekData.totalOutflow.toFixed(2)}
+                            <p className="text-red-600 font-bold text-sm md:text-base">
+                              ₦
+                              {formatCurrency(weekData.totalOutflow.toFixed(2))}
                             </p>
                           </div>
                           <div
-                            className={`backdrop-blur rounded-lg p-3 ${isProfit ? "bg-green-500/20" : "bg-red-500/20"}`}
+                            className={`backdrop-blur rounded-lg p-3 ${isProfit ? "bg-green-500/70" : "bg-red-500/70"}`}
                           >
-                            <p className="text-white/70 text-xs mb-1 flex items-center gap-1">
+                            <p className="text-white text-xs mb-1 flex items-center gap-1">
                               Net{" "}
                               {isProfit ? (
                                 <TrendingUp className="w-3 h-3" />
@@ -328,14 +337,13 @@ const FinancialRecordsCreator = () => {
                             <p
                               className={`font-bold text-sm md:text-base ${isProfit ? "text-green-300" : "text-red-300"}`}
                             >
-                              ${Math.abs(netBalance).toFixed(2)}
+                              ₦{formatCurrency(Math.abs(netBalance).toFixed(2))}
                             </p>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Table */}
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b border-gray-200">
@@ -351,6 +359,9 @@ const FinancialRecordsCreator = () => {
                             </th>
                             <th className="p-3 text-right font-semibold text-gray-700 min-w-[100px]">
                               Outflow
+                            </th>
+                            <th className="p-3 text-left font-semibold text-gray-700 min-w-[100px]">
+                              Payment Method
                             </th>
                             <th className="p-3 text-right font-semibold text-gray-700 min-w-[100px]">
                               Balance
@@ -376,16 +387,19 @@ const FinancialRecordsCreator = () => {
                                 </td>
                                 <td className="p-3 text-right text-green-600 font-semibold">
                                   {record.inflow
-                                    ? `$${record.inflow.toFixed(2)}`
+                                    ? `₦${formatCurrency(record.inflow.toFixed(2))}`
                                     : "-"}
                                 </td>
                                 <td className="p-3 text-right text-red-600 font-semibold">
                                   {record.outflow
-                                    ? `$${record.outflow.toFixed(2)}`
+                                    ? `₦${formatCurrency(record.outflow.toFixed(2))}`
                                     : "-"}
                                 </td>
+                                <td className="p-3 text-gray-700">
+                                  {record.paymentMethod}
+                                </td>
                                 <td className="p-3 text-right font-bold text-gray-900">
-                                  ${record.balance.toFixed(2)}
+                                  ₦{formatCurrency(record.balance.toFixed(2))}
                                 </td>
                                 <td className="p-3">
                                   <div className="flex items-center justify-center gap-2">
@@ -414,7 +428,6 @@ const FinancialRecordsCreator = () => {
           </div>
         )}
 
-        {/* Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
@@ -458,6 +471,22 @@ const FinancialRecordsCreator = () => {
                     placeholder="e.g., Client payment for Project X"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Method *
+                  </label>
+                  <select
+                    name="paymentMethod"
+                    value={formData.paymentMethod}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                    required
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Bank">Bank</option>
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

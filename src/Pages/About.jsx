@@ -2,7 +2,7 @@ const About = () => {
   return (
     <section className="min-h-screen bg-gradient-to-b from-purple-50 to-white pt-10 pb-30 px-6 flex items-center">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-10 md:p-14 border border-gray-100">
-        <h1 className="text-4xl font-extrabold text-[#5247bf] mb-6 text-center tracking-tight">
+        <h1 className="text-4xl font-extrabold text-[#8a85b4] mb-6 text-center tracking-tight">
           About GrowEasy
         </h1>
 

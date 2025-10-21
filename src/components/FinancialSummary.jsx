@@ -21,11 +21,11 @@ import {
   Download,
   Search,
   Calendar,
-  DollarSign,
   Activity,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { TbCurrencyNaira } from "react-icons/tb";
 import { jsPDF } from "jspdf";
 
 const FinancialSummary = () => {
@@ -126,12 +126,22 @@ const FinancialSummary = () => {
     filtered.forEach((record) => {
       const key = getPeriodKey(record.date);
       if (!grouped[key]) {
-        grouped[key] = { inflow: 0, outflow: 0, count: 0, transactions: [] };
+        grouped[key] = {
+          inflow: 0,
+          outflow: 0,
+          count: 0,
+          transactions: [],
+          paymentMethods: { Cash: 0, Bank: 0 },
+        };
       }
       grouped[key].inflow += record.inflow || 0;
       grouped[key].outflow += record.outflow || 0;
       grouped[key].count += 1;
       grouped[key].transactions.push(record);
+      // Default to "Cash" if paymentMethod is undefined
+      const paymentMethod = record.paymentMethod || "Cash";
+      grouped[key].paymentMethods[paymentMethod] =
+        (grouped[key].paymentMethods[paymentMethod] || 0) + 1;
     });
 
     const summaryData = Object.entries(grouped).map(([key, data]) => ({
@@ -205,9 +215,25 @@ const FinancialSummary = () => {
       totalInflow / (filtered.filter((r) => r.inflow > 0).length || 1);
     insights.push({
       type: "info",
-      icon: DollarSign,
+      icon: TbCurrencyNaira,
       title: "Average Inflow",
       description: `₦${formatCurrency(avgInflow)} per transaction`,
+    });
+
+    const paymentCounts = filtered.reduce((acc, r) => {
+      const method = r.paymentMethod || "Cash";
+      acc[method] = (acc[method] || 0) + 1;
+      return acc;
+    }, {});
+    const dominantMethod = Object.entries(paymentCounts).reduce(
+      (max, [method, count]) => (count > max.count ? { method, count } : max),
+      { method: "Cash", count: 0 }
+    );
+    insights.push({
+      type: "info",
+      icon: TbCurrencyNaira,
+      title: "Preferred Payment Method",
+      description: `${dominantMethod.method} used in ${dominantMethod.count} transaction(s)`,
     });
 
     if (summary.periods && summary.periods.length >= 2) {
@@ -273,7 +299,7 @@ const FinancialSummary = () => {
         yPos = 20;
       }
       doc.text(
-        `${p.period}: Inflow ₦${formatCurrency(p.inflow)}, Outflow ₦${formatCurrency(p.outflow)}, Net ₦${formatCurrency(p.net)}`,
+        `${p.period}: Inflow ₦${formatCurrency(p.inflow)}, Outflow ₦${formatCurrency(p.outflow)}, Net ₦${formatCurrency(p.net)}, Cash: ${p.paymentMethods?.Cash || 0}, Bank: ${p.paymentMethods?.Bank || 0}`,
         14,
         yPos
       );
@@ -285,13 +311,23 @@ const FinancialSummary = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ["Period", "Inflow", "Outflow", "Net", "Transaction Count"];
+    const headers = [
+      "Period",
+      "Inflow",
+      "Outflow",
+      "Net",
+      "Transaction Count",
+      "Cash Transactions",
+      "Bank Transactions",
+    ];
     const rows = (summary.periods || []).map((p) => [
       p.period,
       p.inflow.toFixed(2),
       p.outflow.toFixed(2),
       p.net.toFixed(2),
       p.count,
+      p.paymentMethods?.Cash || 0,
+      p.paymentMethods?.Bank || 0,
     ]);
 
     const csvContent = [headers, ...rows]
@@ -328,7 +364,6 @@ const FinancialSummary = () => {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-600">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-6 mt-4">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
             Financial Summary
@@ -338,7 +373,6 @@ const FinancialSummary = () => {
           </p>
         </div>
 
-        {/* Filters */}
         <div className="bg-white rounded-xl shadow-md p-4 md:p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
@@ -420,7 +454,6 @@ const FinancialSummary = () => {
           </div>
         </div>
 
-        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
           <div className="bg-white rounded-xl shadow-md p-6">
             <div className="flex items-center justify-between mb-2">
@@ -464,7 +497,6 @@ const FinancialSummary = () => {
           </div>
         </div>
 
-        {/* Insights */}
         {insights.length > 0 && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
@@ -494,7 +526,6 @@ const FinancialSummary = () => {
           </div>
         )}
 
-        {/* Charts */}
         {chartData.length > 0 && (
           <>
             <div className="bg-white rounded-xl shadow-md p-6 mb-6">
@@ -552,7 +583,6 @@ const FinancialSummary = () => {
           </>
         )}
 
-        {/* Period Breakdown with Transaction Details */}
         {summary.periods && summary.periods.length > 0 && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
@@ -574,7 +604,7 @@ const FinancialSummary = () => {
                         <div className="font-semibold text-gray-900">
                           {p.period}
                         </div>
-                        <div className="grid grid-cols-4 gap-4 mt-1 text-sm">
+                        <div className="grid grid-cols-5 gap-4 mt-1 text-sm">
                           <div>
                             <span className="text-gray-600">Inflow:</span>
                             <span className="font-semibold text-green-600 ml-2">
@@ -588,7 +618,7 @@ const FinancialSummary = () => {
                             </span>
                           </div>
                           <div className="ml-2">
-                            <span className="text-gray-600 ">Net:</span>
+                            <span className="text-gray-600">Net:</span>
                             <span
                               className={`font-semibold ml-2 ${p.net >= 0 ? "text-green-600" : "text-red-600"}`}
                             >
@@ -596,9 +626,15 @@ const FinancialSummary = () => {
                             </span>
                           </div>
                           <div>
-                            <span className="text-gray-600">Transactions:</span>
+                            <span className="text-gray-600">Cash:</span>
                             <span className="font-semibold ml-2">
-                              {p.count}
+                              {p.paymentMethods?.Cash || 0}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Bank:</span>
+                            <span className="font-semibold ml-2">
+                              {p.paymentMethods?.Bank || 0}
                             </span>
                           </div>
                         </div>
@@ -612,7 +648,6 @@ const FinancialSummary = () => {
                       </div>
                     </button>
 
-                    {/* Expanded Transaction Details */}
                     {expandedPeriods[p.period] && (
                       <div className="border-t border-gray-200 p-4 bg-gray-50">
                         <table className="w-full">
@@ -629,6 +664,9 @@ const FinancialSummary = () => {
                               </th>
                               <th className="text-right p-2 font-semibold text-gray-700">
                                 Outflow
+                              </th>
+                              <th className="text-left p-2 font-semibold text-gray-700">
+                                Payment Method
                               </th>
                             </tr>
                           </thead>
@@ -658,6 +696,9 @@ const FinancialSummary = () => {
                                       ? `₦${formatCurrency(t.outflow)}`
                                       : "-"}
                                   </td>
+                                  <td className="p-2 text-gray-700">
+                                    {t.paymentMethod || "Cash"}
+                                  </td>
                                 </tr>
                               ))}
                           </tbody>
@@ -670,7 +711,6 @@ const FinancialSummary = () => {
           </div>
         )}
 
-        {/* Empty State */}
         {records.length === 0 && (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
             <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />

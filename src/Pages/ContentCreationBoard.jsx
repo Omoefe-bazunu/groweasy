@@ -35,6 +35,13 @@ const ContentCreationBoard = () => {
       description: "Manage your financial records",
       action: () => navigate("/financial-records"),
     },
+    {
+      id: "tasks",
+      title: "Business Tasks",
+      icon: <BookOpen className="w-5 h-5" />,
+      description: "Plan your Business Tasks",
+      action: () => navigate("/tasks"),
+    },
   ];
 
   return (

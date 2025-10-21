@@ -18,6 +18,7 @@ import FinancialRecords from "./Pages/BusinessTools/FinancialRecords";
 import Donation from "./Pages/Donation";
 import Invoice from "./Pages/BusinessTools/Invoice";
 import Receipt from "./Pages/BusinessTools/Receipt";
+import Tasks from "./Pages/BusinessTools/Tasks";
 
 const App = () => {
   const location = useLocation();
@@ -52,6 +53,7 @@ const App = () => {
         <Route path="/financial-records" element={<FinancialRecords />} />
         <Route path="/invoices" element={<Invoice />} />
         <Route path="/receipts" element={<Receipt />} />
+        <Route path="/tasks" element={<Tasks />} />
       </Routes>
       {!hideNavPaths.includes(location.pathname) && !isPublicProfile && (
         <BottomNav />
