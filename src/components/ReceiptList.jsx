@@ -374,7 +374,7 @@ const ReceiptsList = () => {
                 : ""
             }
             ${
-              receipt.interestRate && calculateInterestCharges(recept) > 0
+              receipt.interestRate && calculateInterestCharges(receipt) > 0
                 ? `
               <tr>
                 <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Interest Charges:</td>
