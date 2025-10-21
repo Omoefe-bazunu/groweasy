@@ -6,24 +6,38 @@ import {
   query,
   onSnapshot,
   doc,
-  deleteDoc,
   getDoc,
-  updateDoc,
-  serverTimestamp,
+  getDocs,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Users,
+  Receipt,
+  FileText,
+  List,
+  X,
+} from "lucide-react";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [requests, setRequests] = useState([]);
+  const [showModal, setShowModal] = useState(true);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [modalError, setModalError] = useState("");
+  const [users, setUsers] = useState([]);
+  const [totalReceipts, setTotalReceipts] = useState(0);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [totalFinancialRecords, setTotalFinancialRecords] = useState(0);
+  const [totalTasks, setTotalTasks] = useState(0);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [sections, setSections] = useState({
-    subscriptions: true,
+    users: true,
+    metrics: false,
   });
 
   const toggleSection = (section) => {
@@ -34,21 +48,6 @@ export default function AdminDashboard() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        if (currentUser.email === "raniem57@gmail.com") {
-          setIsAdmin(true);
-
-          // Fetch subscription requests
-          const requestsQuery = query(collection(db, "subscriptionRequests"));
-          onSnapshot(requestsQuery, (snapshot) => {
-            const requestsData = snapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            }));
-            setRequests(requestsData);
-          });
-        } else {
-          navigate("/");
-        }
       } else {
         navigate("/login");
       }
@@ -56,201 +55,268 @@ export default function AdminDashboard() {
     return () => unsubscribe();
   }, [navigate]);
 
-  const handleApprove = async (request) => {
-    if (loading) return;
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    setModalError("");
     setLoading(true);
-    setError("");
-    setSuccess("");
 
     try {
-      const userDocRef = doc(db, "users", request.userId);
-      const requestDocRef = doc(db, "subscriptionRequests", request.id);
-      const userSnap = await getDoc(userDocRef);
+      const adminDocRef = doc(db, "admin", "adminAccess");
+      const adminDoc = await getDoc(adminDocRef);
 
-      if (!userSnap.exists()) {
-        throw new Error("User not found");
+      if (!adminDoc.exists()) {
+        setModalError("Admin credentials not found");
+        setLoading(false);
+        return;
       }
 
-      // Calculate expiry date based on months purchased
-      const activationDate = new Date();
-      const expiryDate = new Date();
-      expiryDate.setMonth(expiryDate.getMonth() + (request.months || 1));
-
-      await updateDoc(userDocRef, {
-        subscription: {
-          status: "active",
-          plan: "Premium",
-          activationDate: activationDate.toISOString(),
-          expiryDate: expiryDate.toISOString(),
-          monthsPurchased: request.months || 1,
-          totalAmountPaid: request.totalAmount,
-          lastRenewalDate: activationDate.toISOString(),
-        },
-      });
-
-      await deleteDoc(requestDocRef);
-
-      setSuccess(
-        `Approved ${request.userName}'s subscription for ${request.months} month(s). Total: ₦${request.totalAmount.toLocaleString()}`
-      );
+      const adminData = adminDoc.data();
+      if (
+        adminEmail === adminData.email &&
+        adminPassword === adminData.password
+      ) {
+        setIsAdmin(true);
+        setShowModal(false);
+      } else {
+        setModalError("Invalid admin email or password");
+      }
     } catch (err) {
-      setError("Failed to approve subscription: " + err.message);
+      setModalError("Failed to verify credentials: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReject = async (request) => {
-    if (loading) return;
-    setLoading(true);
-    setError("");
-    setSuccess("");
+  useEffect(() => {
+    if (!isAdmin) return;
 
-    try {
-      const userDocRef = doc(db, "users", request.userId);
-      const requestDocRef = doc(db, "subscriptionRequests", request.id);
+    // Fetch users
+    const usersQuery = query(collection(db, "users"));
+    const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
+      const usersData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setUsers(usersData);
+    });
 
-      // Return user to trial status
-      const trialEndDate = new Date();
-      trialEndDate.setDate(trialEndDate.getDate() + 30);
+    // Fetch counts for receipts, invoices, financial records, and tasks
+    const fetchCounts = async () => {
+      try {
+        const receiptsSnap = await getDocs(collection(db, "receipts"));
+        setTotalReceipts(receiptsSnap.size);
 
-      await updateDoc(userDocRef, {
-        subscription: {
-          status: "trial",
-          plan: "Free Trial",
-          trialEndDate: trialEndDate.toISOString(),
-        },
-      });
+        const invoicesSnap = await getDocs(collection(db, "invoices"));
+        setTotalInvoices(invoicesSnap.size);
 
-      await deleteDoc(requestDocRef);
+        const financialRecordsSnap = await getDocs(
+          collection(db, "financialRecords")
+        );
+        setTotalFinancialRecords(financialRecordsSnap.size);
 
-      setSuccess(`Rejected ${request.userName}'s subscription request.`);
-    } catch (err) {
-      setError("Failed to process rejection: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const tasksSnap = await getDocs(collection(db, "tasks"));
+        setTotalTasks(tasksSnap.size);
+      } catch (err) {
+        setError("Failed to fetch metrics: " + err.message);
+      }
+    };
+    fetchCounts();
 
-  if (!isAdmin) return <div>Access Denied</div>;
+    return () => unsubscribe();
+  }, [isAdmin]);
+
+  if (!user)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-600">
+        Loading...
+      </div>
+    );
 
   return (
-    <div className="min-h-screen flex flex-col max-w-4xl mx-auto px-6 py-10 space-y-8 mb-12 text-gray-600">
-      <h1 className="text-3xl font-bold text-center text-blue-600">
-        Admin Dashboard
-      </h1>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
-          <p className="text-red-600">{error}</p>
+    <div className="min-h-screen flex flex-col max-w-6xl mx-auto px-6 py-10 space-y-8 mb-12 text-gray-600">
+      {/* Admin Login Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Admin Access
+              </h2>
+              <button
+                onClick={() => navigate("/")}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600">
+                  Admin Email
+                </label>
+                <input
+                  type="email"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="Enter admin email"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600">
+                  Admin Password
+                </label>
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="Enter admin password"
+                  required
+                />
+              </div>
+              {modalError && (
+                <p className="text-red-600 text-sm">{modalError}</p>
+              )}
+              <button
+                type="submit"
+                className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                disabled={loading}
+              >
+                {loading ? "Verifying..." : "Verify Credentials"}
+              </button>
+            </form>
+          </div>
         </div>
       )}
-      {success && (
-        <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-          <p className="text-green-600">{success}</p>
-        </div>
-      )}
 
-      {/* Subscription Requests Section */}
-      <div className="bg-white rounded-xl shadow-md">
-        <button
-          onClick={() => toggleSection("subscriptions")}
-          className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
-        >
-          <span>
-            Subscription Requests (
-            {requests.filter((r) => r.status === "pending").length})
-          </span>
-          {sections.subscriptions ? (
-            <ChevronUp className="w-6 h-6" />
-          ) : (
-            <ChevronDown className="w-6 h-6" />
+      {/* Dashboard Content */}
+      {isAdmin && (
+        <>
+          <h1 className="text-3xl font-bold text-center text-blue-600">
+            Admin Dashboard
+          </h1>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+              <p className="text-red-600">{error}</p>
+            </div>
           )}
-        </button>
-        {sections.subscriptions && (
-          <div className="p-4 space-y-6 border-t">
-            {requests.length > 0 ? (
-              requests.map((request) => (
-                <div
-                  key={request.id}
-                  className="p-4 border rounded-lg bg-gray-50 space-y-3"
-                >
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600">User</p>
-                      <p className="font-semibold text-gray-900">
-                        {request.userName}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Email</p>
-                      <p className="font-semibold text-gray-900">
-                        {request.userEmail}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Months</p>
-                      <p className="font-semibold text-gray-900">
-                        {request.months}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Amount</p>
-                      <p className="font-semibold text-gray-900">
-                        ₦{request.totalAmount?.toLocaleString() || "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">
-                      Payment Screenshot
-                    </p>
-                    <a
-                      href={request.screenshotUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm"
-                    >
-                      View Screenshot
-                    </a>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">Status</p>
-                    <p
-                      className={`font-semibold ${request.status === "pending" ? "text-yellow-600" : "text-gray-600"}`}
-                    >
-                      {request.status}
-                    </p>
-                  </div>
 
-                  {request.status === "pending" && (
-                    <div className="flex gap-2 pt-2 border-t">
-                      <button
-                        onClick={() => handleApprove(request)}
-                        className="flex-1 py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-400 font-medium"
-                        disabled={loading}
-                      >
-                        {loading ? "Processing..." : "Approve"}
-                      </button>
-                      <button
-                        onClick={() => handleReject(request)}
-                        className="flex-1 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-gray-400 font-medium"
-                        disabled={loading}
-                      >
-                        {loading ? "Processing..." : "Reject"}
-                      </button>
-                    </div>
-                  )}
+          {/* Metrics Overview Section */}
+          <div className="bg-white rounded-xl shadow-md">
+            <button
+              onClick={() => toggleSection("metrics")}
+              className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
+            >
+              <span>Platform Metrics</span>
+              {sections.metrics ? (
+                <ChevronUp className="w-6 h-6" />
+              ) : (
+                <ChevronDown className="w-6 h-6" />
+              )}
+            </button>
+            {sections.metrics && (
+              <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
+                  <Users className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Total Users</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      {users.length}
+                    </p>
+                  </div>
                 </div>
-              ))
-            ) : (
-              <p className="text-center text-gray-500 py-8">
-                No subscription requests.
-              </p>
+                <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
+                  <Receipt className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Total Receipts</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      {totalReceipts}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
+                  <FileText className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Total Invoices</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      {totalInvoices}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
+                  <List className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Total Tasks</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      {totalTasks}
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
-        )}
-      </div>
+
+          {/* Users Section */}
+          <div className="bg-white rounded-xl shadow-md">
+            <button
+              onClick={() => toggleSection("users")}
+              className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
+            >
+              <span>Users ({users.length})</span>
+              {sections.users ? (
+                <ChevronUp className="w-6 h-6" />
+              ) : (
+                <ChevronDown className="w-6 h-6" />
+              )}
+            </button>
+            {sections.users && (
+              <div className="p-4 border-t">
+                {users.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="p-3 text-sm font-semibold text-gray-600">
+                            Name
+                          </th>
+                          <th className="p-3 text-sm font-semibold text-gray-600">
+                            Email
+                          </th>
+                          <th className="p-3 text-sm font-semibold text-gray-600">
+                            Phone Number
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((user) => (
+                          <tr key={user.id} className="border-t">
+                            <td className="p-3 text-sm text-gray-900">
+                              {user.name || "N/A"}
+                            </td>
+                            <td className="p-3 text-sm text-gray-900">
+                              {user.email || "N/A"}
+                            </td>
+                            <td className="p-3 text-sm text-gray-900">
+                              {user.phoneNumber || "N/A"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500 py-8">
+                    No users found.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
