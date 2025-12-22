@@ -212,14 +212,8 @@ const ReferralDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
-      <div className="bg-[#5247bf] px-6 pt-8 pb-12 text-white">
-        <div className="max-w-4xl mx-auto">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-indigo-200 hover:text-white mb-6 transition"
-          >
-            <ArrowLeft className="w-5 h-5" /> Back to Dashboard
-          </button>
+      <div className="bg-[#5247bf] px-6 pt-8 pb-12 text-white flex items-center ">
+        <div className="max-w-4xl mx-auto text-center">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Partner Program</h1>
