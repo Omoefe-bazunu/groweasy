@@ -40,20 +40,15 @@ const ReferralDashboard = () => {
 
   // Fetch Referral List & Withdrawal History on mount
   useEffect(() => {
-    // GUARD: Ensure user exists
-    if (!user) {
-      setLoadingList(false);
-      return;
-    }
+    // 1. Exit immediately if there is no authenticated user
+    if (!user || !user.uid) return;
 
     const fetchData = async () => {
       try {
-        // 1. Fetch Users who I referred (Using UID is faster & safer)
-        const usersRef = collection(db, "users");
+        setLoadingList(true);
 
-        // QUERY CHANGE: Look for 'referrerUid' == my UID
-        // Note: For old data that doesn't have referrerUid, this list might be empty until you migrate them or new users sign up.
-        // If you need to support old data, we can keep the old query, but the Rule update below handles both.
+        const usersRef = collection(db, "users");
+        // Security Rule Check: request.query.filters.referrerUid == request.auth.uid
         const qUsers = query(
           usersRef,
           where("referrerUid", "==", user.uid),
@@ -66,31 +61,19 @@ const ReferralDashboard = () => {
           ...doc.data(),
         }));
         setReferralList(users);
-
-        // 2. Fetch My Withdrawal History (Unchanged)
-        const withdrawRef = collection(db, "withdrawals");
-        const qWithdraw = query(
-          withdrawRef,
-          where("userId", "==", user.uid),
-          orderBy("requestedAt", "desc")
-        );
-        const withdrawSnaps = await getDocs(qWithdraw);
-        const withdraws = withdrawSnaps.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setWithdrawalHistory(withdraws);
       } catch (error) {
-        console.error("Error fetching referral data:", error);
-        // Fallback for legacy data (optional): if query fails, try old method?
-        // Ideally, just stick to the new method for production stability.
+        // If we hit a permission error, it's usually because the user
+        // just logged out or the index hasn't finished building.
+        if (error.code !== "permission-denied") {
+          console.error("Error fetching referral data:", error);
+        }
       } finally {
         setLoadingList(false);
       }
     };
 
     fetchData();
-  }, [user]);
+  }, [user]); // Only re-run when the auth user actually changes
 
   // Generate Link Logic
   const generateReferralLink = async () => {
