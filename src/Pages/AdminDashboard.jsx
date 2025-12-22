@@ -29,10 +29,11 @@ import {
   ClipboardList,
   Package,
   Banknote,
-  Settings, // Added Settings Icon
-  Save, // Added Save Icon
+  Settings,
+  Save,
+  Calendar, // Added Calendar Icon
+  ShieldCheck, // Added Shield Icon for status
 } from "lucide-react";
-import { toast } from "react-toastify"; // Assuming you use toast for notifications
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -42,8 +43,11 @@ export default function AdminDashboard() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [modalError, setModalError] = useState("");
+
+  // Data States
   const [users, setUsers] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
+  const [allSubscriptions, setAllSubscriptions] = useState({}); // New State for Subscriptions
 
   // Metrics State
   const [totalReceipts, setTotalReceipts] = useState(0);
@@ -54,7 +58,7 @@ export default function AdminDashboard() {
   const [totalInventory, setTotalInventory] = useState(0);
   const [totalPayrolls, setTotalPayrolls] = useState(0);
 
-  // Settings State (New)
+  // Settings State
   const [monthlyFee, setMonthlyFee] = useState(3000);
   const [updatingFee, setUpdatingFee] = useState(false);
 
@@ -63,7 +67,7 @@ export default function AdminDashboard() {
     users: true,
     subscriptions: true,
     metrics: false,
-    settings: true, // New section
+    settings: true,
   });
 
   const toggleSection = (section) => {
@@ -108,7 +112,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // --- New Function: Update Subscription Fee ---
   const handleUpdateFee = async (e) => {
     e.preventDefault();
     if (!monthlyFee || monthlyFee < 0)
@@ -182,10 +185,33 @@ export default function AdminDashboard() {
     }
   };
 
+  // Helper to format timestamps safely
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "N/A";
+    // Handle Firestore Timestamp or standard Date string
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString("en-NG", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  // Helper to calculate days remaining
+  const calculateDaysLeft = (expiresAt) => {
+    if (!expiresAt) return 0;
+    const expiryDate = expiresAt.toDate
+      ? expiresAt.toDate()
+      : new Date(expiresAt);
+    const today = new Date();
+    const diffTime = expiryDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
   useEffect(() => {
     if (!isAdmin) return;
 
-    // Fetch Settings (Fee)
     const fetchSettings = async () => {
       try {
         const settingsSnap = await getDoc(doc(db, "admin", "settings"));
@@ -198,17 +224,32 @@ export default function AdminDashboard() {
     };
     fetchSettings();
 
-    onSnapshot(collection(db, "users"), (snap) => {
+    // Fetch Users
+    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
 
+    // Fetch Pending Payments
     const q = query(
       collection(db, "pendingPayments"),
       where("status", "==", "pending")
     );
-    onSnapshot(q, (snap) => {
+    const unsubscribePayments = onSnapshot(q, (snap) => {
       setPendingPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
+
+    // --- NEW: Fetch All Subscriptions to map to users ---
+    const unsubscribeSubs = onSnapshot(
+      collection(db, "subscriptions"),
+      (snap) => {
+        const subsMap = {};
+        snap.forEach((doc) => {
+          // Map subscription data by User ID (doc.id is the userId based on your setDoc logic)
+          subsMap[doc.id] = doc.data();
+        });
+        setAllSubscriptions(subsMap);
+      }
+    );
 
     const fetchCounts = async () => {
       const [r, i, f, t, q, inv, p] = await Promise.all([
@@ -229,6 +270,12 @@ export default function AdminDashboard() {
       setTotalPayrolls(p.size);
     };
     fetchCounts();
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribePayments();
+      unsubscribeSubs();
+    };
   }, [isAdmin]);
 
   if (!user)
@@ -297,7 +344,7 @@ export default function AdminDashboard() {
               Admin Dashboard
             </h1>
 
-            {/* --- NEW SECTION: Subscription Settings --- */}
+            {/* Subscription Settings */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
               <button
                 onClick={() => toggleSection("settings")}
@@ -422,7 +469,7 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Metrics Overview Section */}
+            {/* Metrics Overview */}
             <div className="bg-white rounded-xl shadow-md">
               <button
                 onClick={() => toggleSection("metrics")}
@@ -437,6 +484,7 @@ export default function AdminDashboard() {
               </button>
               {sections.metrics && (
                 <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* ... (Existing Metric Cards) ... */}
                   <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
                     <Users className="w-8 h-8 text-blue-600" />
                     <div>
@@ -465,33 +513,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <ClipboardList className="w-8 h-8 text-blue-600" />
-                    <div>
-                      <p className="text-sm text-gray-600">Quotations</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {totalQuotations}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <Package className="w-8 h-8 text-blue-600" />
-                    <div>
-                      <p className="text-sm text-gray-600">Inventory Items</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {totalInventory}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <Banknote className="w-8 h-8 text-blue-600" />
-                    <div>
-                      <p className="text-sm text-gray-600">Payrolls</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {totalPayrolls}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
                     <List className="w-8 h-8 text-blue-600" />
                     <div>
                       <p className="text-sm text-gray-600">Total Tasks</p>
@@ -504,7 +525,7 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Users Section */}
+            {/* Users Section (UPDATED TABLE) */}
             <div className="bg-white rounded-xl shadow-md">
               <button
                 onClick={() => toggleSection("users")}
@@ -531,24 +552,68 @@ export default function AdminDashboard() {
                               Email
                             </th>
                             <th className="p-3 text-sm font-semibold text-gray-600">
-                              Phone Number
+                              Date Signed Up
+                            </th>
+                            <th className="p-3 text-sm font-semibold text-gray-600">
+                              Subscription
+                            </th>
+                            <th className="p-3 text-sm font-semibold text-gray-600">
+                              Days Left
                             </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {users.map((user) => (
-                            <tr key={user.id} className="border-t">
-                              <td className="p-3 text-sm text-gray-900">
-                                {user.name || "N/A"}
-                              </td>
-                              <td className="p-3 text-sm text-gray-900">
-                                {user.email || "N/A"}
-                              </td>
-                              <td className="p-3 text-sm text-gray-900">
-                                {user.phoneNumber || "N/A"}
-                              </td>
-                            </tr>
-                          ))}
+                          {users.map((user) => {
+                            // Find subscription for this user
+                            const sub = allSubscriptions[user.id];
+                            const isPro =
+                              sub?.status === "active" &&
+                              calculateDaysLeft(sub.expiresAt) > 0;
+                            const daysLeft = isPro
+                              ? calculateDaysLeft(sub.expiresAt)
+                              : 0;
+
+                            return (
+                              <tr key={user.id} className="border-t">
+                                <td className="p-3 text-sm text-gray-900">
+                                  {user.name || "N/A"}
+                                </td>
+                                <td className="p-3 text-sm text-gray-900">
+                                  {user.email || "N/A"}
+                                </td>
+                                <td className="p-3 text-sm text-gray-900 flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-gray-400" />
+                                  {formatDate(user.createdAt)}
+                                </td>
+                                <td className="p-3 text-sm">
+                                  {isPro ? (
+                                    <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold">
+                                      <ShieldCheck className="w-3 h-3" /> PRO (
+                                      {sub.type === "yearly"
+                                        ? "Yearly"
+                                        : "Monthly"}
+                                      )
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-semibold">
+                                      Free Plan
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3 text-sm font-medium">
+                                  {isPro ? (
+                                    <span
+                                      className={`${daysLeft < 5 ? "text-red-500" : "text-gray-900"}`}
+                                    >
+                                      {daysLeft} days
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -560,10 +625,11 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
+
             {/* Experts CTA */}
             <button
               onClick={() => handleExperts()}
-              className="w-full flex justify-between cursor-pointer bg-white rounded-lg shadow-md items-center p-4 text-lg font-semibold text-blue-600"
+              className="w-full flex justify-between cursor-pointer bg-white rounded-lg shadow-md items-center p-4 text-lg font-semibold text-blue-600 hover:bg-gray-50 transition"
             >
               Manage Documents Experts
             </button>
