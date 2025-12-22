@@ -40,21 +40,26 @@ const ReferralDashboard = () => {
 
   // Fetch Referral List & Withdrawal History on mount
   useEffect(() => {
-    // GUARD: Ensure user and referralCode exist before running logic
-    if (!user || !userData?.referralCode) {
+    // GUARD: Ensure user exists
+    if (!user) {
       setLoadingList(false);
       return;
     }
 
     const fetchData = async () => {
       try {
-        // 1. Fetch Users who used my code
+        // 1. Fetch Users who I referred (Using UID is faster & safer)
         const usersRef = collection(db, "users");
+
+        // QUERY CHANGE: Look for 'referrerUid' == my UID
+        // Note: For old data that doesn't have referrerUid, this list might be empty until you migrate them or new users sign up.
+        // If you need to support old data, we can keep the old query, but the Rule update below handles both.
         const qUsers = query(
           usersRef,
-          where("referredBy", "==", userData.referralCode),
+          where("referrerUid", "==", user.uid),
           orderBy("createdAt", "desc")
         );
+
         const userSnaps = await getDocs(qUsers);
         const users = userSnaps.docs.map((doc) => ({
           id: doc.id,
@@ -62,7 +67,7 @@ const ReferralDashboard = () => {
         }));
         setReferralList(users);
 
-        // 2. Fetch My Withdrawal History
+        // 2. Fetch My Withdrawal History (Unchanged)
         const withdrawRef = collection(db, "withdrawals");
         const qWithdraw = query(
           withdrawRef,
@@ -77,18 +82,25 @@ const ReferralDashboard = () => {
         setWithdrawalHistory(withdraws);
       } catch (error) {
         console.error("Error fetching referral data:", error);
+        // Fallback for legacy data (optional): if query fails, try old method?
+        // Ideally, just stick to the new method for production stability.
       } finally {
         setLoadingList(false);
       }
     };
 
     fetchData();
-    // FIXED: Added optional chaining (user?.uid) to prevent crash
-  }, [userData?.referralCode, user?.uid]);
+  }, [user]);
 
   // Generate Link Logic
   const generateReferralLink = async () => {
     if (!user) return;
+
+    // Safety: Don't overwrite if they already have money or a code
+    if (userData?.referralCode) {
+      return toast.info("You already have a referral link!");
+    }
+
     setGenerating(true);
     try {
       const prefix = (userData.name || "USR")
@@ -104,13 +116,12 @@ const ReferralDashboard = () => {
       const userRef = doc(db, "users", user.uid);
       await updateDoc(userRef, {
         referralCode: code,
-        walletBalance: 0,
+        walletBalance: 0, // Only set to 0 on initial creation
         totalEarnings: 0,
         referralCount: 0,
       });
-
       toast.success("Referral link generated!");
-      window.location.reload();
+      // window.location.reload(); // Not needed if using onSnapshot in Context [cite: 152]
     } catch (error) {
       toast.error("Failed to generate link");
     } finally {
