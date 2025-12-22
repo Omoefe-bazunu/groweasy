@@ -8,9 +8,12 @@ import {
   FileText,
   User,
   File,
-  CreditCard,
-  Lock,
   CheckCircle,
+  Lock,
+  Share2,
+  Wallet,
+  ArrowRight,
+  Loader2,
 } from "lucide-react";
 
 const Dashboard = () => {
@@ -41,6 +44,7 @@ const Dashboard = () => {
   const handleBusinessProfile = () => navigate("/profile");
   const handleViewDocuments = () => navigate("/documents");
   const handleUpgrade = () => navigate("/subscribe");
+  const handleReferrals = () => navigate("/referrals"); // Links to detailed dashboard
 
   if (loading || !userData) {
     return (
@@ -56,10 +60,10 @@ const Dashboard = () => {
 
   return (
     <div
-      className="min-h-screen bg-cover bg-center bg-no-repeat pb-24 pt-8 px-8"
+      className="min-h-screen bg-cover bg-center bg-no-repeat pb-24 pt-8 px-4 md:px-8"
       style={{ backgroundImage: `url('/gebg.jpg')` }}
     >
-      <div className="bg-[#5247bf] rounded-xl p-6 mb-8 max-w-2xl mx-auto">
+      <div className="bg-[#5247bf] rounded-xl p-6 mb-8 max-w-2xl mx-auto shadow-xl">
         <h1 className="text-3xl font-extrabold text-white text-center">
           Dashboard
         </h1>
@@ -99,7 +103,6 @@ const Dashboard = () => {
               </button>
             )}
           </div>
-
           {isPaid ? (
             <p className="text-green-600 text-sm font-medium">
               Unlimited receipts, invoices & financial records
@@ -112,6 +115,40 @@ const Dashboard = () => {
               </p>
             </div>
           )}
+        </div>
+
+        {/* --- PARTNER PROGRAM (Condensed) --- */}
+        <div
+          onClick={handleReferrals}
+          className="bg-gradient-to-r from-indigo-900 to-[#5247bf] rounded-xl shadow-lg p-6 flex items-center justify-between text-white cursor-pointer hover:shadow-xl transition-all duration-300 relative overflow-hidden"
+        >
+          {/* Background decoration */}
+          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
+
+          <div className="flex items-center gap-4 z-10">
+            <div className="bg-white/20 p-3 rounded-full">
+              <Share2 className="w-6 h-6 text-yellow-300" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Partner Program</h2>
+              {userData.referralCode ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <Wallet className="w-4 h-4 text-indigo-200" />
+                  <span className="font-mono text-lg font-bold">
+                    ₦{(userData.walletBalance || 0).toLocaleString()}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-sm text-indigo-200">
+                  Earn 25% commission on upgrades
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="z-10 bg-white/20 p-2 rounded-full hover:bg-white/30 transition">
+            <ArrowRight className="w-6 h-6" />
+          </div>
         </div>
 
         {/* Business Tools */}

@@ -7,13 +7,7 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import {
-  doc,
-  setDoc,
-  onSnapshot,
-  serverTimestamp,
-  getDoc,
-} from "firebase/firestore";
+import { doc, onSnapshot, getDoc } from "firebase/firestore";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 
@@ -26,46 +20,60 @@ export function UserProvider({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Auth state listener
+  // 1. Auth State Listener
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       setUser(currentUser);
-      setLoading(false);
-      if (!currentUser) setUserData(null);
+      if (!currentUser) {
+        setUserData(null);
+        setLoading(false);
+      }
     });
     return () => unsubscribe();
   }, []);
 
-  // User data listener
+  // 2. User Data Listener (Real-time Profile Sync)
   useEffect(() => {
     if (!user) return;
 
     const userDocRef = doc(db, "users", user.uid);
     const unsubscribe = onSnapshot(
       userDocRef,
-      (doc) => {
-        if (doc.exists()) {
-          const data = { id: doc.id, ...doc.data() };
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = { id: docSnap.id, ...docSnap.data() };
           setUserData(data);
         } else {
+          // Doc doesn't exist yet (Backend might be creating it)
           setUserData(null);
+
+          // Only redirect to login if we aren't currently signing up
+          // This prevents kicking the user out while the backend creates the profile
           if (location.pathname !== "/signup") {
-            navigate("/login");
+            // navigate("/login"); // Optional: careful with this in production loops
           }
         }
+        setLoading(false);
       },
       (err) => {
         console.error("Snapshot error:", err);
-        toast.error("Failed to fetch user data");
-        setUserData(null);
+        // Don't toast error here to avoid spamming the user on connection blips
+        setLoading(false);
       }
     );
     return () => unsubscribe();
-  }, [user, location.pathname, navigate]);
+  }, [user, location.pathname]);
 
-  const signupWithEmail = async (name, email, password, phoneNumber) => {
+  // --- ACTIONS ---
+
+  /**
+   * PURE AUTHENTICATION ONLY
+   * The actual database profile creation is handled by the SignUp component calling the Backend API.
+   */
+  const signupWithEmail = async (name, email, password) => {
+    setLoading(true);
     try {
-      // Create Firebase Auth user
+      // 1. Create Authentication User
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -73,75 +81,37 @@ export function UserProvider({ children }) {
       );
       const newUser = userCredential.user;
 
-      // Update display name
+      // 2. Update Display Name immediately
       await updateProfile(newUser, { displayName: name });
 
-      // Create user document with 30-day free trial
-      const trialEndDate = new Date();
-      trialEndDate.setDate(trialEndDate.getDate() + 30);
-
-      const userDocRef = doc(db, "users", newUser.uid);
-      const userDocData = {
-        name,
-        email,
-        phoneNumber,
-        createdAt: serverTimestamp(),
-        subscription: {
-          status: "trial", // "trial" | "active" | "pending" | "expired"
-          plan: "Free Trial",
-          trialEndDate: trialEndDate.toISOString(),
-          trialStartDate: new Date().toISOString(),
-          activationDate: null,
-          expiryDate: null,
-        },
-      };
-
-      await setDoc(userDocRef, userDocData);
-
-      // Wait for document to be created
-      await new Promise((resolve) => {
-        const checkDoc = async () => {
-          if ((await getDoc(userDocRef)).exists()) resolve();
-          else setTimeout(checkDoc, 500);
-        };
-        checkDoc();
-      });
-
-      setUserData({ id: userDocRef.id, ...userDocData });
-      setUser(newUser);
-      toast.success("Account created! You have 30 days free trial.");
-      navigate("/dashboard");
+      // 3. Return user so component can get Token and call Backend
       return newUser;
     } catch (err) {
-      // Clean up if signup fails
-      if (auth.currentUser) {
-        await signOut(auth);
-      }
+      console.error("Auth Error:", err);
       throw new Error(err.message || "Signup failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   const loginWithEmail = async (email, password) => {
+    setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email,
         password
       );
-      const loggedInUser = userCredential.user;
-      const userDoc = await getDoc(doc(db, "users", loggedInUser.uid));
 
-      if (!userDoc.exists()) {
-        await signOut(auth);
-        throw new Error("Account not found");
-      }
-
-      setUser(loggedInUser);
+      // We don't need to manually fetch doc here, the useEffect listener will kick in
       toast.success("Logged in successfully!");
       navigate("/dashboard");
-      return loggedInUser;
+      return userCredential.user;
     } catch (err) {
-      throw new Error(err.message || "Login failed");
+      console.error("Login Error:", err);
+      throw new Error("Invalid email or password");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -149,7 +119,6 @@ export function UserProvider({ children }) {
     try {
       await sendPasswordResetEmail(auth, email);
       toast.success("Password reset email sent!");
-      return "Password reset email sent.";
     } catch (err) {
       throw new Error(err.message || "Password reset failed");
     }
@@ -167,19 +136,15 @@ export function UserProvider({ children }) {
     }
   };
 
-  // Check if user has access to create receipts/invoices/records
+  // Legacy check - Prefer using SubscriptionContext for this logic now
   const hasAccessToCreate = () => {
     if (!userData || !userData.subscription) return false;
-
     const status = userData.subscription.status;
-
     if (status === "active") return true;
-
     if (status === "trial") {
       const trialEnd = new Date(userData.subscription.trialEndDate);
       return new Date() <= trialEnd;
     }
-
     return false;
   };
 

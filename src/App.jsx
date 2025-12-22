@@ -30,6 +30,7 @@ import KnowledgeBase from "./Pages/KnowledgeBase";
 import NigeriaTaxCalculator from "./Pages/BusinessTools/TaxCalculator";
 import InventoryManager from "./Pages/BusinessTools/InventoryManager";
 import CustomerManager from "./Pages/BusinessTools/CustomerManager";
+import ReferralDashboard from "./Pages/ReferralDashboard";
 
 const App = () => {
   const location = useLocation();
@@ -55,6 +56,7 @@ const App = () => {
 
         {/* Authenticated User Pages */}
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/referrals" element={<ReferralDashboard />} />
         <Route
           path="/content-creation-board"
           element={<ContentCreationBoard />}

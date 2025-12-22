@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { useUser } from "../context/UserContext";
-import { Eye, EyeOff } from "lucide-react";
+import { useUser } from "../context/UserContext"; // Assuming this handles Firebase Auth only
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
+import { auth } from "../lib/firebase"; // Import auth to get token
+
+// Production API URL - Configure this in your .env file (VITE_API_URL)
+// Fallback to localhost for local testing if env var is missing
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const SignUp = () => {
   const [name, setName] = useState("");
@@ -12,14 +17,23 @@ const SignUp = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
   const { signupWithEmail } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
 
+  // 1. Capture Referral Code on Mount
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const refCode = params.get("ref");
+    if (refCode) {
+      localStorage.setItem("referralCode", refCode);
+    }
+  }, [location]);
+
   const handleEmailSignUp = async (e) => {
     e.preventDefault();
 
-    // Validation
     if (!name || !email || !password || !phoneNumber) {
       setError("Please fill in all fields");
       return;
@@ -34,23 +48,50 @@ const SignUp = () => {
     setError("");
 
     try {
-      // Get referrer ID from URL if exists
-      const searchParams = new URLSearchParams(location.search);
-      const referrerId = searchParams.get("ref");
+      // 1. Create Auth User (Client Side)
+      // This should ONLY do createUserWithEmailAndPassword
+      await signupWithEmail(name, email, password);
 
-      // Create account
-      await signupWithEmail(name, email, password, phoneNumber, referrerId);
-      // Navigation to dashboard is handled in UserContext
+      // 2. Get the current user and their token
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error("Authentication failed");
+
+      const token = await currentUser.getIdToken();
+
+      // 3. Get Referral Code
+      const referralCode = localStorage.getItem("referralCode");
+
+      // 4. Call Backend to Create Profile & Track Referral securely
+      const response = await fetch(`${API_URL}/referral/complete-signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          phoneNumber,
+          referralCode: referralCode || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to complete profile setup");
+      }
+
+      // 5. Clean up and Redirect
+      localStorage.removeItem("referralCode");
+      toast.success("Account created successfully!");
+      navigate("/dashboard");
     } catch (error) {
+      console.error("Signup Error:", error);
       setError(error.message || "Failed to sign up");
       toast.error(error.message || "Failed to sign up");
     } finally {
       setLoading(false);
     }
-  };
-
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
   };
 
   return (
@@ -123,7 +164,7 @@ const SignUp = () => {
               />
               <button
                 type="button"
-                onClick={togglePasswordVisibility}
+                onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
               >
                 {showPassword ? (
@@ -155,9 +196,10 @@ const SignUp = () => {
 
           <button
             type="submit"
-            className="w-full bg-[#5247bf] hover:bg-[#4238a6] text-white p-3 rounded-lg shadow-md cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+            className="w-full bg-[#5247bf] hover:bg-[#4238a6] text-white p-3 rounded-lg shadow-md cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 font-medium flex justify-center items-center gap-2"
             disabled={loading}
           >
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
             {loading ? "Creating Account..." : "Sign Up"}
           </button>
         </form>

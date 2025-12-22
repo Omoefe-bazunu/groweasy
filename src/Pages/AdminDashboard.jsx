@@ -12,6 +12,7 @@ import {
   updateDoc,
   serverTimestamp,
   where,
+  orderBy,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -31,9 +32,17 @@ import {
   Banknote,
   Settings,
   Save,
-  Calendar, // Added Calendar Icon
-  ShieldCheck, // Added Shield Icon for status
+  Calendar,
+  ShieldCheck,
+  Wallet,
+  Check,
+  Loader2,
+  Copy, // Added Copy Icon
 } from "lucide-react";
+import { toast } from "react-toastify";
+
+// Production API URL
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -47,7 +56,9 @@ export default function AdminDashboard() {
   // Data States
   const [users, setUsers] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
-  const [allSubscriptions, setAllSubscriptions] = useState({}); // New State for Subscriptions
+  const [allSubscriptions, setAllSubscriptions] = useState({});
+  const [withdrawalRequests, setWithdrawalRequests] = useState([]);
+  const [referrers, setReferrers] = useState([]);
 
   // Metrics State
   const [totalReceipts, setTotalReceipts] = useState(0);
@@ -58,16 +69,18 @@ export default function AdminDashboard() {
   const [totalInventory, setTotalInventory] = useState(0);
   const [totalPayrolls, setTotalPayrolls] = useState(0);
 
-  // Settings State
+  // Settings & UI State
   const [monthlyFee, setMonthlyFee] = useState(3000);
   const [updatingFee, setUpdatingFee] = useState(false);
-
+  const [processingId, setProcessingId] = useState(null);
   const [loading, setLoading] = useState(false);
+
   const [sections, setSections] = useState({
     users: true,
     subscriptions: true,
     metrics: false,
     settings: true,
+    referrals: false,
   });
 
   const toggleSection = (section) => {
@@ -82,10 +95,9 @@ export default function AdminDashboard() {
     return () => unsubscribe();
   }, [navigate]);
 
-  const handleExperts = () => {
-    navigate("/admin/add-expert");
-  };
+  const handleExperts = () => navigate("/admin/add-expert");
 
+  // --- ADMIN AUTH ---
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     setModalError("");
@@ -106,7 +118,7 @@ export default function AdminDashboard() {
         setModalError("Invalid email or password");
       }
     } catch (err) {
-      setModalError("Login failed. Try again.");
+      setModalError("Login failed. Check connection.");
     } finally {
       setLoading(false);
     }
@@ -114,8 +126,7 @@ export default function AdminDashboard() {
 
   const handleUpdateFee = async (e) => {
     e.preventDefault();
-    if (!monthlyFee || monthlyFee < 0)
-      return alert("Please enter a valid amount");
+    if (!monthlyFee || monthlyFee < 0) return toast.warn("Invalid fee amount");
 
     setUpdatingFee(true);
     try {
@@ -128,47 +139,82 @@ export default function AdminDashboard() {
         },
         { merge: true }
       );
-      alert("Subscription fee updated successfully!");
+      toast.success("Subscription fee updated");
     } catch (error) {
-      console.error("Error updating fee:", error);
-      alert("Failed to update fee.");
+      toast.error("Failed to update fee");
     } finally {
       setUpdatingFee(false);
     }
   };
 
+  // --- ACTIONS ---
+
   const approveSubscription = async (payment) => {
+    if (!window.confirm(`Approve ${payment.plan} for ${payment.userEmail}?`))
+      return;
+
+    setProcessingId(payment.id);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_URL}/admin/approve-payment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          paymentId: payment.id,
+          userId: payment.userId,
+          amount: payment.amount,
+          plan: payment.plan,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Approval failed");
+
+      toast.success("Subscription approved & commissions paid");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleApproveWithdrawal = async (request) => {
     if (
       !window.confirm(
-        `Approve ${payment.plan?.toUpperCase()} subscription for ${payment.userEmail}?`
+        `Mark ₦${request.amount.toLocaleString()} as PAID for ${request.userName}?`
       )
     )
       return;
 
+    setProcessingId(request.id);
     try {
-      const days = payment.plan === "yearly" ? 365 : 30;
-
-      await setDoc(
-        doc(db, "subscriptions", payment.userId),
-        {
-          status: "active",
-          type: payment.plan || "monthly",
-          expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
-          approvedAt: serverTimestamp(),
-          approvedBy: user.uid,
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_URL}/admin/approve-withdrawal`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        { merge: true }
-      );
-
-      await updateDoc(doc(db, "pendingPayments", payment.id), {
-        status: "approved",
-        approvedAt: serverTimestamp(),
+        body: JSON.stringify({
+          withdrawalId: request.id,
+          userId: request.userId,
+          amount: request.amount,
+        }),
       });
 
-      alert("Subscription approved successfully!");
-    } catch (err) {
-      console.error("Approve failed:", err);
-      alert("Failed to approve: " + err.message);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Withdrawal failed");
+
+      toast.success("Withdrawal processed successfully");
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message);
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -179,16 +225,21 @@ export default function AdminDashboard() {
         status: "rejected",
         rejectedAt: serverTimestamp(),
       });
-      alert("Payment rejected");
+      toast.info("Payment rejected");
     } catch (err) {
-      alert("Failed to reject");
+      toast.error("Failed to reject");
     }
   };
 
-  // Helper to format timestamps safely
+  // Helper to copy bank details
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Bank details copied!");
+  };
+
+  // --- HELPERS ---
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
-    // Handle Firestore Timestamp or standard Date string
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString("en-NG", {
       year: "numeric",
@@ -197,7 +248,6 @@ export default function AdminDashboard() {
     });
   };
 
-  // Helper to calculate days remaining
   const calculateDaysLeft = (expiresAt) => {
     if (!expiresAt) return 0;
     const expiryDate = expiresAt.toDate
@@ -209,88 +259,108 @@ export default function AdminDashboard() {
     return diffDays > 0 ? diffDays : 0;
   };
 
+  // --- DATA FETCHING ---
   useEffect(() => {
     if (!isAdmin) return;
 
-    const fetchSettings = async () => {
-      try {
-        const settingsSnap = await getDoc(doc(db, "admin", "settings"));
-        if (settingsSnap.exists()) {
-          setMonthlyFee(settingsSnap.data().monthlySubscriptionFee || 3000);
-        }
-      } catch (error) {
-        console.error("Error fetching settings:", error);
-      }
-    };
-    fetchSettings();
+    // 1. Settings
+    getDoc(doc(db, "admin", "settings")).then((snap) => {
+      if (snap.exists())
+        setMonthlyFee(snap.data().monthlySubscriptionFee || 3000);
+    });
 
-    // Fetch Users
-    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snap) => {
+    // 2. Real-time Listeners
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+      const refs = [];
+      snap.forEach((doc) => {
+        const d = doc.data();
+        if (d.referralCount > 0 || d.walletBalance > 0 || d.referralCode) {
+          refs.push({ id: doc.id, ...d });
+        }
+      });
+      setReferrers(
+        refs.sort((a, b) => (b.walletBalance || 0) - (a.walletBalance || 0))
+      );
     });
 
-    // Fetch Pending Payments
-    const q = query(
-      collection(db, "pendingPayments"),
-      where("status", "==", "pending")
-    );
-    const unsubscribePayments = onSnapshot(q, (snap) => {
-      setPendingPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-
-    // --- NEW: Fetch All Subscriptions to map to users ---
-    const unsubscribeSubs = onSnapshot(
-      collection(db, "subscriptions"),
+    const unsubPayments = onSnapshot(
+      query(
+        collection(db, "pendingPayments"),
+        where("status", "==", "pending")
+      ),
       (snap) => {
-        const subsMap = {};
-        snap.forEach((doc) => {
-          // Map subscription data by User ID (doc.id is the userId based on your setDoc logic)
-          subsMap[doc.id] = doc.data();
-        });
-        setAllSubscriptions(subsMap);
+        setPendingPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       }
     );
 
+    const unsubWithdrawals = onSnapshot(
+      query(collection(db, "withdrawals"), orderBy("requestedAt", "desc")),
+      (snap) => {
+        setWithdrawalRequests(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        );
+      }
+    );
+
+    const unsubSubs = onSnapshot(collection(db, "subscriptions"), (snap) => {
+      const subsMap = {};
+      snap.forEach((doc) => {
+        subsMap[doc.id] = doc.data();
+      });
+      setAllSubscriptions(subsMap);
+    });
+
+    // 3. Static Metrics
     const fetchCounts = async () => {
-      const [r, i, f, t, q, inv, p] = await Promise.all([
-        getDocs(collection(db, "receipts")),
-        getDocs(collection(db, "invoices")),
-        getDocs(collection(db, "financialRecords")),
-        getDocs(collection(db, "tasks")),
-        getDocs(collection(db, "quotations")),
-        getDocs(collection(db, "inventory")),
-        getDocs(collection(db, "payrolls")),
-      ]);
-      setTotalReceipts(r.size);
-      setTotalInvoices(i.size);
-      setTotalFinancialRecords(f.size);
-      setTotalTasks(t.size);
-      setTotalQuotations(q.size);
-      setTotalInventory(inv.size);
-      setTotalPayrolls(p.size);
+      const cols = [
+        "receipts",
+        "invoices",
+        "financialRecords",
+        "tasks",
+        "quotations",
+        "inventory",
+        "payrolls",
+      ];
+      try {
+        const snaps = await Promise.all(
+          cols.map((c) => getDocs(collection(db, c)))
+        );
+        setTotalReceipts(snaps[0].size);
+        setTotalInvoices(snaps[1].size);
+        setTotalFinancialRecords(snaps[2].size);
+        setTotalTasks(snaps[3].size);
+        setTotalQuotations(snaps[4].size);
+        setTotalInventory(snaps[5].size);
+        setTotalPayrolls(snaps[6].size);
+      } catch (e) {
+        console.error("Metrics load failed", e);
+      }
     };
     fetchCounts();
 
     return () => {
-      unsubscribeUsers();
-      unsubscribePayments();
-      unsubscribeSubs();
+      unsubUsers();
+      unsubPayments();
+      unsubWithdrawals();
+      unsubSubs();
     };
   }, [isAdmin]);
 
   if (!user)
     return (
       <div className="min-h-screen flex items-center justify-center text-xl">
-        Loading...
+        <Loader2 className="w-8 h-8 animate-spin text-[#5247bf]" />
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-10 pb-25 px-6">
+    <div className="min-h-screen bg-gray-50 pt-10 pb-25 px-4 md:px-6">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Admin Login Modal */}
+        {/* LOGIN MODAL */}
         {showModal && (
-          <div className="fixed inset-0 text-gray-700 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 text-gray-700 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">
@@ -303,7 +373,6 @@ export default function AdminDashboard() {
                   <X className="w-6 h-6" />
                 </button>
               </div>
-
               <form onSubmit={handleAdminLogin} className="space-y-5">
                 <input
                   type="email"
@@ -328,8 +397,9 @@ export default function AdminDashboard() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-[#5247bf] text-white py-3 rounded-lg font-semibold hover:bg-[#4238a6] disabled:bg-gray-400"
+                  className="w-full bg-[#5247bf] text-white py-3 rounded-lg font-semibold hover:bg-[#4238a6] disabled:bg-gray-400 flex justify-center items-center gap-2"
                 >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}{" "}
                   {loading ? "Verifying..." : "Login as Admin"}
                 </button>
               </form>
@@ -337,22 +407,162 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Admin Dashboard */}
         {isAdmin && (
           <>
-            <h1 className="text-4xl font-bold text-center text-[#5247bf] mb-10">
+            <h1 className="text-3xl md:text-4xl font-bold text-center text-[#5247bf] mb-10">
               Admin Dashboard
             </h1>
 
-            {/* Subscription Settings */}
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            {/* --- REFERRAL MANAGEMENT --- */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-yellow-400/20">
+              <button
+                onClick={() => toggleSection("referrals")}
+                className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xl font-bold hover:opacity-90 transition"
+              >
+                <span className="flex items-center gap-3 text-gray-700">
+                  <Wallet className="w-6 h-6" /> Referral Management
+                </span>
+                {sections.referrals ? <ChevronUp /> : <ChevronDown />}
+              </button>
+
+              {sections.referrals && (
+                <div className="p-6">
+                  {/* Pending Withdrawals */}
+                  <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
+                    Pending Withdrawals
+                  </h3>
+                  {withdrawalRequests.filter((r) => r.status === "pending")
+                    .length === 0 ? (
+                    <p className="text-gray-500 italic mb-8">
+                      No pending requests.
+                    </p>
+                  ) : (
+                    <div className="space-y-4 mb-8 text-gray-700">
+                      {withdrawalRequests
+                        .filter((r) => r.status === "pending")
+                        .map((req) => (
+                          <div
+                            key={req.id}
+                            className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg flex flex-col md:flex-row justify-between items-start gap-4"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="font-bold text-gray-800 text-lg">
+                                  {req.userName}
+                                </p>
+                                <span className="text-sm text-gray-500">
+                                  ({req.email})
+                                </span>
+                              </div>
+                              <p className="text-2xl font-bold text-[#5247bf] mb-3">
+                                ₦{req.amount.toLocaleString()}
+                              </p>
+
+                              {/* --- IMPROVED BANK DETAILS DISPLAY --- */}
+                              <div className="flex items-center gap-2 bg-white border border-gray-300 p-3 rounded-lg max-w-md">
+                                <div className="flex-1">
+                                  <p className="text-xs text-gray-500 uppercase font-semibold">
+                                    Bank Details
+                                  </p>
+                                  <p className="text-gray-800 font-medium whitespace-pre-line">
+                                    {req.bankDetails || "No details provided"}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() =>
+                                    copyToClipboard(req.bankDetails)
+                                  }
+                                  className="p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600 rounded transition"
+                                  title="Copy Bank Details"
+                                >
+                                  <Copy className="w-5 h-5" />
+                                </button>
+                              </div>
+
+                              <p className="text-xs text-gray-400 mt-2">
+                                Requested:{" "}
+                                {req.requestedAt?.toDate().toLocaleString()}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleApproveWithdrawal(req)}
+                              disabled={processingId === req.id}
+                              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:bg-gray-400 mt-2 md:mt-0 font-bold shadow-md"
+                            >
+                              {processingId === req.id ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                              ) : (
+                                <Check className="w-5 h-5" />
+                              )}{" "}
+                              Mark Paid
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Top Referrers */}
+                  <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
+                    Top Referrers
+                  </h3>
+                  <div className="overflow-x-auto text-gray-700">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-3">User</th>
+                          <th className="p-3">Code</th>
+                          <th className="p-3">Total Referrals</th>
+                          <th className="p-3">Wallet Bal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {referrers.map((u) => (
+                          <tr key={u.id} className="border-b hover:bg-gray-50">
+                            <td className="p-3 text-gray-800 font-medium">
+                              {u.name}
+                              <br />
+                              <span className="text-xs text-gray-500">
+                                {u.email}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <code className="bg-gray-100 px-2 py-1 rounded text-xs">
+                                {u.referralCode}
+                              </code>
+                            </td>
+                            <td className="p-3 font-bold">
+                              {u.referralCount || 0}
+                            </td>
+                            <td className="p-3 font-bold text-green-600">
+                              ₦{(u.walletBalance || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                        {referrers.length === 0 && (
+                          <tr>
+                            <td
+                              colSpan="4"
+                              className="p-4 text-center text-gray-500"
+                            >
+                              No active referrers found.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* --- SUBSCRIPTION SETTINGS --- */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
               <button
                 onClick={() => toggleSection("settings")}
                 className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-gray-800 to-gray-900 text-white text-xl font-bold hover:opacity-90 transition"
               >
                 <span className="flex items-center gap-3">
-                  <Settings className="w-6 h-6" />
-                  Subscription Settings
+                  <Settings className="w-6 h-6" /> Subscription Settings
                 </span>
                 {sections.settings ? <ChevronUp /> : <ChevronDown />}
               </button>
@@ -375,12 +585,11 @@ export default function AdminDashboard() {
                         className="bg-[#5247bf] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#4238a6] flex items-center gap-2 disabled:opacity-50"
                       >
                         {updatingFee ? (
-                          "Saving..."
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
-                          <>
-                            <Save className="w-4 h-4" /> Save
-                          </>
-                        )}
+                          <Save className="w-4 h-4" />
+                        )}{" "}
+                        Save
                       </button>
                     </div>
                     <p className="text-sm text-gray-500 mt-2">
@@ -392,15 +601,15 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Pending Payment Proofs */}
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            {/* --- PENDING PAYMENT PROOFS --- */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
               <button
                 onClick={() => toggleSection("subscriptions")}
                 className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-[#5247bf] to-[#4238a6] text-white text-xl font-bold hover:opacity-90 transition"
               >
                 <span className="flex items-center gap-3">
-                  <Clock className="w-6 h-6" />
-                  Pending Payment Proofs ({pendingPayments.length})
+                  <Clock className="w-6 h-6" /> Pending Payment Proofs (
+                  {pendingPayments.length})
                 </span>
                 {sections.subscriptions ? <ChevronUp /> : <ChevronDown />}
               </button>
@@ -421,11 +630,7 @@ export default function AdminDashboard() {
                         </p>
                         <div className="mt-3">
                           <span
-                            className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                              payment.plan === "yearly"
-                                ? "bg-orange-100 text-orange-800"
-                                : "bg-blue-100 text-blue-800"
-                            }`}
+                            className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${payment.plan === "yearly" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`}
                           >
                             {payment.plan === "yearly" ? "YEARLY" : "MONTHLY"} •
                             ₦{payment.amount}
@@ -438,17 +643,22 @@ export default function AdminDashboard() {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 text-[#5247bf] hover:underline font-medium"
                           >
-                            <Image className="w-5 h-5" />
-                            View Payment Proof
+                            <Image className="w-5 h-5" /> View Payment Proof
                           </a>
                         </div>
                       </div>
                       <div className="flex gap-3 self-start lg:self-center">
                         <button
                           onClick={() => approveSubscription(payment)}
-                          className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
+                          disabled={processingId === payment.id}
+                          className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium flex items-center gap-2 disabled:bg-gray-400"
                         >
-                          <CheckCircle className="w-5 h-5" /> Approve
+                          {processingId === payment.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-5 h-5" />
+                          )}{" "}
+                          Approve
                         </button>
                         <button
                           onClick={() => rejectSubscription(payment.id)}
@@ -461,7 +671,6 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               )}
-
               {sections.subscriptions && pendingPayments.length === 0 && (
                 <div className="p-12 text-center text-gray-500 text-lg">
                   No pending payment proofs
@@ -469,8 +678,8 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Metrics Overview */}
-            <div className="bg-white rounded-xl shadow-md">
+            {/* --- METRICS --- */}
+            <div className="bg-white rounded-xl shadow-md text-gray-700">
               <button
                 onClick={() => toggleSection("metrics")}
                 className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
@@ -484,49 +693,40 @@ export default function AdminDashboard() {
               </button>
               {sections.metrics && (
                 <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* ... (Existing Metric Cards) ... */}
                   <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <Users className="w-8 h-8 text-blue-600" />
+                    <Users className="text-blue-600" />
                     <div>
-                      <p className="text-sm text-gray-600">Total Users</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {users.length}
-                      </p>
+                      <p className="text-sm">Users</p>
+                      <p className="font-bold">{users.length}</p>
                     </div>
                   </div>
                   <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <Receipt className="w-8 h-8 text-blue-600" />
+                    <Receipt className="text-blue-600" />
                     <div>
-                      <p className="text-sm text-gray-600">Total Receipts</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {totalReceipts}
-                      </p>
+                      <p className="text-sm">Receipts</p>
+                      <p className="font-bold">{totalReceipts}</p>
                     </div>
                   </div>
                   <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <FileText className="w-8 h-8 text-blue-600" />
+                    <FileText className="text-blue-600" />
                     <div>
-                      <p className="text-sm text-gray-600">Total Invoices</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {totalInvoices}
-                      </p>
+                      <p className="text-sm">Invoices</p>
+                      <p className="font-bold">{totalInvoices}</p>
                     </div>
                   </div>
                   <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <List className="w-8 h-8 text-blue-600" />
+                    <List className="text-blue-600" />
                     <div>
-                      <p className="text-sm text-gray-600">Total Tasks</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {totalTasks}
-                      </p>
+                      <p className="text-sm">Tasks</p>
+                      <p className="font-bold">{totalTasks}</p>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Users Section (UPDATED TABLE) */}
-            <div className="bg-white rounded-xl shadow-md">
+            {/* --- USERS SECTION --- */}
+            <div className="bg-white rounded-xl shadow-md text-gray-700">
               <button
                 onClick={() => toggleSection("users")}
                 className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
@@ -552,7 +752,7 @@ export default function AdminDashboard() {
                               Email
                             </th>
                             <th className="p-3 text-sm font-semibold text-gray-600">
-                              Date Signed Up
+                              Signed Up
                             </th>
                             <th className="p-3 text-sm font-semibold text-gray-600">
                               Subscription
@@ -564,7 +764,6 @@ export default function AdminDashboard() {
                         </thead>
                         <tbody>
                           {users.map((user) => {
-                            // Find subscription for this user
                             const sub = allSubscriptions[user.id];
                             const isPro =
                               sub?.status === "active" &&
@@ -572,17 +771,16 @@ export default function AdminDashboard() {
                             const daysLeft = isPro
                               ? calculateDaysLeft(sub.expiresAt)
                               : 0;
-
                             return (
                               <tr key={user.id} className="border-t">
-                                <td className="p-3 text-sm text-gray-900">
+                                <td className="p-3 text-sm">
                                   {user.name || "N/A"}
                                 </td>
-                                <td className="p-3 text-sm text-gray-900">
+                                <td className="p-3 text-sm">
                                   {user.email || "N/A"}
                                 </td>
-                                <td className="p-3 text-sm text-gray-900 flex items-center gap-2">
-                                  <Calendar className="w-4 h-4 text-gray-400" />
+                                <td className="p-3 text-sm flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-gray-400" />{" "}
                                   {formatDate(user.createdAt)}
                                 </td>
                                 <td className="p-3 text-sm">
@@ -596,7 +794,7 @@ export default function AdminDashboard() {
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-semibold">
-                                      Free Plan
+                                      Free
                                     </span>
                                   )}
                                 </td>
@@ -626,7 +824,6 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Experts CTA */}
             <button
               onClick={() => handleExperts()}
               className="w-full flex justify-between cursor-pointer bg-white rounded-lg shadow-md items-center p-4 text-lg font-semibold text-blue-600 hover:bg-gray-50 transition"
