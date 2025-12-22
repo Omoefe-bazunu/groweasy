@@ -48,20 +48,16 @@ const SignUp = () => {
     setError("");
 
     try {
-      // 1. Create Auth User (Client Side)
-      // This should ONLY do createUserWithEmailAndPassword
-      await signupWithEmail(name, email, password);
+      // 1. Create Auth User
+      const newUser = await signupWithEmail(name, email, password);
 
-      // 2. Get the current user and their token
-      const currentUser = auth.currentUser;
-      if (!currentUser) throw new Error("Authentication failed");
-
-      const token = await currentUser.getIdToken();
+      // 2. Get Token
+      const token = await newUser.getIdToken();
 
       // 3. Get Referral Code
       const referralCode = localStorage.getItem("referralCode");
 
-      // 4. Call Backend to Create Profile & Track Referral securely
+      // 4. Call Backend
       const response = await fetch(`${API_URL}/referral/complete-signup`, {
         method: "POST",
         headers: {
@@ -76,15 +72,21 @@ const SignUp = () => {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to complete profile setup");
+        throw new Error(data.error || "Failed to complete profile setup");
       }
 
-      // 5. Clean up and Redirect
+      // 5. Clean up and wait for profile to be ready
       localStorage.removeItem("referralCode");
-      toast.success("Account created successfully!");
-      navigate("/dashboard");
+
+      toast.success("Account created! Setting up your profile...");
+
+      // Wait 2 seconds for Firestore listener to catch up
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 2000);
     } catch (error) {
       console.error("Signup Error:", error);
       setError(error.message || "Failed to sign up");

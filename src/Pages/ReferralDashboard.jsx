@@ -40,15 +40,20 @@ const ReferralDashboard = () => {
 
   // Fetch Referral List & Withdrawal History on mount
   useEffect(() => {
-    // 1. Exit immediately if there is no authenticated user
-    if (!user || !user.uid) return;
+    // GUARD: Ensure user exists
+    if (!user) {
+      setLoadingList(false);
+      return;
+    }
 
     const fetchData = async () => {
       try {
-        setLoadingList(true);
-
+        // 1. Fetch Users who I referred (Using UID is faster & safer)
         const usersRef = collection(db, "users");
-        // Security Rule Check: request.query.filters.referrerUid == request.auth.uid
+
+        // QUERY CHANGE: Look for 'referrerUid' == my UID
+        // Note: For old data that doesn't have referrerUid, this list might be empty until you migrate them or new users sign up.
+        // If you need to support old data, we can keep the old query, but the Rule update below handles both.
         const qUsers = query(
           usersRef,
           where("referrerUid", "==", user.uid),
@@ -61,35 +66,41 @@ const ReferralDashboard = () => {
           ...doc.data(),
         }));
         setReferralList(users);
+
+        // 2. Fetch My Withdrawal History (Unchanged)
+        const withdrawRef = collection(db, "withdrawals");
+        const qWithdraw = query(
+          withdrawRef,
+          where("userId", "==", user.uid),
+          orderBy("requestedAt", "desc")
+        );
+        const withdrawSnaps = await getDocs(qWithdraw);
+        const withdraws = withdrawSnaps.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setWithdrawalHistory(withdraws);
       } catch (error) {
-        // If we hit a permission error, it's usually because the user
-        // just logged out or the index hasn't finished building.
-        if (error.code !== "permission-denied") {
-          console.error("Error fetching referral data:", error);
-        }
+        console.error("Error fetching referral data:", error);
+        // Fallback for legacy data (optional): if query fails, try old method?
+        // Ideally, just stick to the new method for production stability.
       } finally {
         setLoadingList(false);
       }
     };
 
     fetchData();
-  }, [user]); // Only re-run when the auth user actually changes
+  }, [user]);
 
   // Generate Link Logic
   const generateReferralLink = async () => {
     if (!user) return;
-
-    // Safety: Don't overwrite if they already have money or a code
-    if (userData?.referralCode) {
-      return toast.info("You already have a referral link!");
-    }
-
     setGenerating(true);
     try {
       const prefix = (userData.name || "USR")
         .substring(0, 3)
         .toUpperCase()
-        .replace(/[^A-Z]/g, "USR");
+        .replace(/[^A-Z]/g, "X");
       const randomStr = Math.random()
         .toString(36)
         .substring(2, 7)
@@ -97,15 +108,16 @@ const ReferralDashboard = () => {
       const code = `${prefix}-${randomStr}`;
 
       const userRef = doc(db, "users", user.uid);
+
+      // ONLY update the referralCode field
       await updateDoc(userRef, {
         referralCode: code,
-        walletBalance: 0, // Only set to 0 on initial creation
-        totalEarnings: 0,
-        referralCount: 0,
       });
+
       toast.success("Referral link generated!");
-      // window.location.reload(); // Not needed if using onSnapshot in Context [cite: 152]
+      // Don't reload - let real-time listener update UI
     } catch (error) {
+      console.error("Generate link error:", error);
       toast.error("Failed to generate link");
     } finally {
       setGenerating(false);
@@ -212,8 +224,14 @@ const ReferralDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
-      <div className="bg-[#5247bf] px-6 pt-8 pb-12 text-white flex items-center ">
-        <div className="max-w-4xl mx-auto text-center">
+      <div className="bg-[#5247bf] px-6 pt-8 pb-12 text-white">
+        <div className="max-w-4xl mx-auto">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="flex items-center gap-2 text-indigo-200 hover:text-white mb-6 transition"
+          >
+            <ArrowLeft className="w-5 h-5" /> Back to Dashboard
+          </button>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Partner Program</h1>
