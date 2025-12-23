@@ -6,8 +6,6 @@ import {
   doc,
   updateDoc,
   collection,
-  addDoc,
-  serverTimestamp,
   query,
   where,
   getDocs,
@@ -21,26 +19,32 @@ import {
   Wallet,
   Users,
   TrendingUp,
-  Banknote,
   Loader2,
   History,
+  X,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
 const ReferralDashboard = () => {
   const navigate = useNavigate();
-  const { user, userData } = useUser();
+  const { user, userData } = useUser(); // Accesses global real-time user data [cite: 62, 152]
 
+  // Dashboard States
   const [generating, setGenerating] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [referralList, setReferralList] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [withdrawalHistory, setWithdrawalHistory] = useState([]);
+  const [showForm, setShowForm] = useState(false);
 
-  // Fetch Referral List & Withdrawal History on mount
+  // Form States
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [bankDetails, setBankDetails] = useState("");
+
+  // 1. Fetch Data on Mount
   useEffect(() => {
-    // GUARD: Ensure user exists
     if (!user) {
       setLoadingList(false);
       return;
@@ -48,26 +52,17 @@ const ReferralDashboard = () => {
 
     const fetchData = async () => {
       try {
-        // 1. Fetch Users who I referred (Using UID is faster & safer)
+        // Fetch users referred by the current user using UID for security [cite: 65]
         const usersRef = collection(db, "users");
-
-        // QUERY CHANGE: Look for 'referrerUid' == my UID
-        // Note: For old data that doesn't have referrerUid, this list might be empty until you migrate them or new users sign up.
-        // If you need to support old data, we can keep the old query, but the Rule update below handles both.
         const qUsers = query(
           usersRef,
           where("referrerUid", "==", user.uid),
           orderBy("createdAt", "desc")
         );
-
         const userSnaps = await getDocs(qUsers);
-        const users = userSnaps.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setReferralList(users);
+        setReferralList(userSnaps.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-        // 2. Fetch My Withdrawal History (Unchanged)
+        // Fetch withdrawal history [cite: 67-69]
         const withdrawRef = collection(db, "withdrawals");
         const qWithdraw = query(
           withdrawRef,
@@ -75,15 +70,11 @@ const ReferralDashboard = () => {
           orderBy("requestedAt", "desc")
         );
         const withdrawSnaps = await getDocs(qWithdraw);
-        const withdraws = withdrawSnaps.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setWithdrawalHistory(withdraws);
+        setWithdrawalHistory(
+          withdrawSnaps.docs.map((d) => ({ id: d.id, ...d.data() }))
+        );
       } catch (error) {
-        console.error("Error fetching referral data:", error);
-        // Fallback for legacy data (optional): if query fails, try old method?
-        // Ideally, just stick to the new method for production stability.
+        console.error("Fetch Error:", error);
       } finally {
         setLoadingList(false);
       }
@@ -92,58 +83,151 @@ const ReferralDashboard = () => {
     fetchData();
   }, [user]);
 
-  // Generate Link Logic
+  // 2. Withdrawal Submission via Backend API [cite: 191, 192]
+  //   const handleSubmitWithdrawal = async (e) => {
+  //     e.preventDefault();
+  //     if (!user || withdrawing) return;
+
+  //     const amountNum = Number(withdrawAmount);
+  //     if (amountNum < 500) return toast.warn("Minimum withdrawal is ₦500");
+
+  //     setWithdrawing(true);
+  //     try {
+  //       const token = await user.getIdToken();
+  //       const response = await fetch(
+  //         `${import.meta.env.VITE_API_URL}/referral/request-withdrawal`,
+  //         {
+  //           method: "POST",
+  //           headers: {
+  //             "Content-Type": "application/json",
+  //             Authorization: `Bearer ${token}`,
+  //           },
+  //           body: JSON.stringify({
+  //             amount: amountNum,
+  //             bankDetails: bankDetails,
+  //           }),
+  //         }
+  //       );
+
+  //       const result = await response.json();
+
+  //       if (!response.ok) {
+  //         throw new Error(result.error || "Failed to submit request");
+  //       }
+
+  //       toast.success(result.message);
+  //       setShowForm(false); // Corrected variable name
+  //       setWithdrawAmount("");
+  //       setBankDetails("");
+
+  //       // Optimistic UI Update for immediate feedback
+  //       setWithdrawalHistory((prev) => [
+  //         {
+  //           id: result.withdrawalId || Date.now().toString(),
+  //           status: "pending",
+  //           amount: amountNum,
+  //           requestedAt: { toDate: () => new Date() },
+  //         },
+  //         ...prev,
+  //       ]);
+  //     } catch (error) {
+  //       console.error("Submission error:", error);
+  //       toast.error(error.message);
+  //     } finally {
+  //       setWithdrawing(false);
+  //     }
+  //   };
+
+  const handleSubmitWithdrawal = async (e) => {
+    e.preventDefault();
+    if (!user || withdrawing) return;
+
+    const amountNum = Number(withdrawAmount);
+    if (amountNum < 500) return toast.warn("Minimum withdrawal is ₦500");
+
+    setWithdrawing(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/referral/request-withdrawal`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            amount: amountNum,
+            bankDetails: bankDetails,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to submit request");
+      }
+
+      // FALLBACK: Use a string if result.message is missing
+      toast.success(
+        result.message || "Withdrawal request submitted successfully!"
+      );
+
+      setShowForm(false);
+      setWithdrawAmount("");
+      setBankDetails("");
+
+      // Optimistic UI Update [cite: 93]
+      setWithdrawalHistory((prev) => [
+        {
+          id: result.withdrawalId || Date.now().toString(),
+          status: "pending",
+          amount: amountNum,
+          requestedAt: { toDate: () => new Date() },
+        },
+        ...prev,
+      ]);
+    } catch (error) {
+      console.error("Submission error:", error);
+      toast.error(error.message || "Something went wrong");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  // 3. Link Management [cite: 74-78]
   const generateReferralLink = async () => {
-    if (!user) return;
     setGenerating(true);
     try {
-      const prefix = (userData.name || "USR")
-        .substring(0, 3)
-        .toUpperCase()
-        .replace(/[^A-Z]/g, "X");
-      const randomStr = Math.random()
-        .toString(36)
-        .substring(2, 7)
-        .toUpperCase();
-      const code = `${prefix}-${randomStr}`;
-
-      const userRef = doc(db, "users", user.uid);
-
-      // ONLY update the referralCode field
-      await updateDoc(userRef, {
-        referralCode: code,
-      });
-
-      toast.success("Referral link generated!");
-      // Don't reload - let real-time listener update UI
-    } catch (error) {
-      console.error("Generate link error:", error);
-      toast.error("Failed to generate link");
+      const code = `${userData.name?.substring(0, 3).toUpperCase() || "USR"}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      await updateDoc(doc(db, "users", user.uid), { referralCode: code });
+      toast.success("Link generated!");
+    } catch (e) {
+      toast.error("Error generating link");
     } finally {
       setGenerating(false);
     }
   };
 
-  // Copy Link Logic
   const copyLink = () => {
-    const link = `${window.location.origin}/signup?ref=${userData?.referralCode}`;
-    navigator.clipboard.writeText(link);
+    navigator.clipboard.writeText(
+      `${window.location.origin}/signup?ref=${userData.referralCode}`
+    );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    toast.success("Copied to clipboard");
+    toast.success("Link copied!");
   };
 
-  // Share Logic
   const shareLink = async () => {
     const link = `${window.location.origin}/signup?ref=${userData?.referralCode}`;
-    const shareData = {
-      title: "Join GrowEasy",
-      text: "Manage your business with ease. Sign up using my link!",
-      url: link,
-    };
     try {
       if (navigator.share) {
-        await navigator.share(shareData);
+        await navigator.share({
+          title: "Join GrowEasy",
+          text: "Start managing your business easily. Sign up here!",
+          url: link,
+        });
       } else {
         copyLink();
       }
@@ -152,100 +236,49 @@ const ReferralDashboard = () => {
     }
   };
 
-  // Withdrawal Logic
-  const handleWithdrawal = async () => {
-    if (!user) return;
-    const balance = userData?.walletBalance || 0;
-
-    if (balance < 1000) {
-      return toast.warn("Minimum withdrawal is ₦1,000");
-    }
-
-    // Check for pending requests
-    const hasPending = withdrawalHistory.some((w) => w.status === "pending");
-    if (hasPending) {
-      return toast.info("You have a pending withdrawal request.");
-    }
-
-    const bankDetails = window.prompt(
-      `Withdraw ₦${balance.toLocaleString()}?\n\nEnter Bank Name & Account Number:`
-    );
-
-    if (!bankDetails) return;
-
-    setWithdrawing(true);
-    try {
-      await addDoc(collection(db, "withdrawals"), {
-        userId: user.uid,
-        userName: userData.name,
-        email: user.email,
-        amount: balance,
-        bankDetails: bankDetails,
-        status: "pending",
-        requestedAt: serverTimestamp(),
-      });
-
-      toast.success("Request submitted successfully!");
-      // Optimistic update for UI
-      setWithdrawalHistory((prev) => [
-        {
-          status: "pending",
-          amount: balance,
-          requestedAt: { toDate: () => new Date() },
-        },
-        ...prev,
-      ]);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to submit request");
-    } finally {
-      setWithdrawing(false);
-    }
-  };
-
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "-";
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString("en-NG", {
+  // Date Formatting Helper [cite: 96-98]
+  const formatDate = (ts) => {
+    if (!ts) return "-";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString("en-NG", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
   };
 
-  // Wait for both user and userData to be ready
+  // Loading Guard [cite: 150, 154]
   if (!user || !userData)
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#5247bf]" />
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#5247bf]" />
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
+    <div className="min-h-screen bg-gray-50 text-gray-700 pb-20 relative">
+      {/* Header [cite: 99-102] */}
       <div className="bg-[#5247bf] px-6 pt-8 pb-12 text-white">
         <div className="max-w-4xl mx-auto">
           <button
             onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-indigo-200 hover:text-white mb-6 transition"
+            className="flex items-center gap-2 text-indigo-200 mb-6 hover:text-white transition"
           >
             <ArrowLeft className="w-5 h-5" /> Back to Dashboard
           </button>
-          <div className="flex items-center justify-between">
+          <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold">Partner Program</h1>
               <p className="text-indigo-200 mt-2">
-                Earn 25% commission on every referral upgrade.
+                Earn 25% commission on Pro upgrades.
               </p>
             </div>
-            {/* Desktop Share Button */}
             {userData.referralCode && (
               <button
                 onClick={shareLink}
-                className="hidden md:flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition border border-white/20"
+                className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg border border-white/20 hover:bg-white/20"
               >
-                <Share2 className="w-5 h-5" /> Share Link
+                <Share2 className="w-5 h-5" /> Share
               </button>
             )}
           </div>
@@ -253,148 +286,165 @@ const ReferralDashboard = () => {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 -mt-8 space-y-6">
-        {/* 1. STATS CARDS */}
+        {/* Referral Status / CTA [cite: 104-107] */}
         {!userData.referralCode ? (
-          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-            <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-[#5247bf]" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Start Earning Today
-            </h2>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Generate your unique link and share it with business owners.
-              You'll get paid whenever they subscribe to a Pro plan.
-            </p>
+          <div className="bg-white rounded-xl shadow-lg p-10 text-center">
+            <Users className="w-12 h-12 text-[#5247bf] mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-4">Start Earning Today</h2>
             <button
               onClick={generateReferralLink}
               disabled={generating}
-              className="bg-[#5247bf] text-white px-8 py-3 rounded-full font-bold hover:bg-[#4238a6] transition shadow-lg flex items-center gap-2 mx-auto disabled:opacity-70"
+              className="bg-[#5247bf] text-white px-10 py-3 rounded-full font-bold hover:bg-[#4238a6] transition flex items-center gap-2 mx-auto"
             >
               {generating ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="animate-spin w-5 h-5" />
               ) : (
-                "Generate Referral Link"
+                "Generate My Link"
               )}
             </button>
           </div>
         ) : (
           <>
-            {/* Stats Grid */}
+            {/* Stats Overview [cite: 108-115] */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-[#5247bf]">
-                <div className="flex items-center gap-3 mb-2 text-gray-500">
-                  <Wallet className="w-5 h-5" /> Wallet Balance
-                </div>
-                <div className="text-3xl font-extrabold text-gray-900">
+                <p className="text-gray-500 text-sm mb-1">Wallet Balance</p>
+                <p className="text-2xl font-extrabold">
                   ₦{(userData.walletBalance || 0).toLocaleString()}
-                </div>
+                </p>
                 <button
-                  onClick={handleWithdrawal}
-                  className="mt-4 w-full py-2 border border-[#5247bf] text-[#5247bf] rounded-lg text-sm font-semibold hover:bg-purple-50 transition"
+                  onClick={() => setShowForm(!showForm)}
+                  className="mt-4 w-full cursor-pointer text-white bg-[#5247bf] rounded-lg font-bold hover:bg-[#190f6e] transition flex items-center justify-center gap-2 py-2"
                 >
                   Withdraw Funds
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${showForm ? "rotate-180" : ""}`}
+                  />
                 </button>
               </div>
-
               <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-green-500">
-                <div className="flex items-center gap-3 mb-2 text-gray-500">
-                  <TrendingUp className="w-5 h-5" /> Total Earnings
-                </div>
-                <div className="text-3xl font-extrabold text-gray-900">
+                <p className="text-gray-500 text-sm mb-1">Total Earnings</p>
+                <p className="text-2xl font-extrabold">
                   ₦{(userData.totalEarnings || 0).toLocaleString()}
-                </div>
-                <p className="text-xs text-gray-400 mt-4">Lifetime earnings</p>
+                </p>
               </div>
-
               <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-orange-500">
-                <div className="flex items-center gap-3 mb-2 text-gray-500">
-                  <Users className="w-5 h-5" /> Total Signups
-                </div>
-                <div className="text-3xl font-extrabold text-gray-900">
+                <p className="text-gray-500 text-sm mb-1">Total Signups</p>
+                <p className="text-2xl font-extrabold">
                   {userData.referralCount || 0}
-                </div>
-                <p className="text-xs text-gray-400 mt-4">
-                  Successful registrations
                 </p>
               </div>
             </div>
 
-            {/* Link Section */}
-            <div className="bg-white p-6 rounded-xl shadow-md">
-              <h3 className="font-semibold text-gray-700 mb-3">
-                Your Referral Link
-              </h3>
-              <div className="flex gap-2">
-                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-600 font-mono text-sm truncate flex items-center">
-                  {window.location.origin}/signup?ref={userData.referralCode}
+            {/* Withdrawal Form Section */}
+            {showForm && (
+              <div className="bg-white p-6 rounded-xl shadow-md animate-in slide-in-from-top duration-300">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">
+                    Withdraw Funds
+                  </h3>
+                  <button
+                    onClick={() => setShowForm(false)}
+                    className="p-2 hover:bg-gray-200 rounded-full transition"
+                  >
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
                 </div>
-                <button
-                  onClick={copyLink}
-                  className="bg-indigo-50 text-[#5247bf] px-4 py-2 rounded-lg hover:bg-indigo-100 transition flex items-center gap-2 font-medium"
-                >
-                  {copied ? (
-                    <CheckCircle className="w-5 h-5" />
-                  ) : (
-                    <Copy className="w-5 h-5" />
-                  )}
-                  <span className="hidden sm:inline">Copy</span>
-                </button>
-                <button
-                  onClick={shareLink}
-                  className="bg-[#5247bf] text-white px-4 py-2 rounded-lg hover:bg-[#4238a6] transition flex items-center gap-2"
-                >
-                  <Share2 className="w-5 h-5" />
-                </button>
+                <form onSubmit={handleSubmitWithdrawal} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Amount to Withdraw (₦)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 5000"
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      className="w-full p-4 rounded-xl border border-gray-200 focus:border-[#5247bf] focus:ring-2 focus:ring-[#5247bf]/20 outline-none transition"
+                      required
+                    />
+                    <p className="text-[11px] text-gray-400 mt-2">
+                      Available Balance: ₦
+                      {(userData.walletBalance || 0).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Bank Name, Account Number & Name
+                    </label>
+                    <textarea
+                      placeholder="Kuda Bank, 1234567890, John Doe"
+                      value={bankDetails}
+                      onChange={(e) => setBankDetails(e.target.value)}
+                      className="w-full p-4 rounded-xl border border-gray-200 focus:border-[#5247bf] focus:ring-2 focus:ring-[#5247bf]/20 outline-none transition h-32 resize-none"
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={withdrawing}
+                    className="w-full bg-[#5247bf] text-white py-4 rounded-xl font-bold shadow-lg hover:bg-[#4238a6] transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                  >
+                    {withdrawing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" /> Submitting
+                        Request...
+                      </>
+                    ) : (
+                      "Request Withdrawal"
+                    )}
+                  </button>
+                </form>
               </div>
+            )}
+
+            {/* Referral Link Box [cite: 116-121] */}
+            <div className="bg-white p-6 rounded-xl shadow-md flex gap-2">
+              <div className="flex-1 bg-gray-50 p-3.5 rounded-xl text-gray-600 truncate text-sm font-mono border">
+                {window.location.origin}/signup?ref={userData.referralCode}
+              </div>
+              <button
+                onClick={copyLink}
+                className="bg-indigo-50 text-[#5247bf] px-5 py-2 rounded-xl font-bold border border-indigo-100"
+              >
+                {copied ? (
+                  <CheckCircle className="w-5 h-5" />
+                ) : (
+                  <Copy className="w-5 h-5" />
+                )}
+              </button>
             </div>
 
-            {/* 2. REFERRAL LIST */}
+            {/* History Tables [cite: 122-134] */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-                <h3 className="font-bold text-gray-800">Referral History</h3>
+              <div className="px-6 py-4 bg-gray-50 font-bold border-b text-gray-700">
+                Referral History
               </div>
-
               {loadingList ? (
-                <div className="p-8 text-center text-gray-500">
-                  Loading history...
+                <div className="p-10 text-center">
+                  <Loader2 className="animate-spin mx-auto text-gray-300" />
                 </div>
               ) : referralList.length === 0 ? (
-                <div className="p-12 text-center flex flex-col items-center">
-                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                    <Users className="w-6 h-6 text-gray-400" />
-                  </div>
-                  <p className="text-gray-500">
-                    No referrals yet. Share your link to get started!
-                  </p>
+                <div className="p-10 text-center text-gray-400">
+                  No referrals recorded yet.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-gray-50 text-gray-600 font-medium">
-                      <tr>
-                        <th className="px-6 py-3">User</th>
-                        <th className="px-6 py-3">Date Joined</th>
-                        <th className="px-6 py-3">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {referralList.map((refUser) => (
-                        <tr key={refUser.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <p className="font-medium text-gray-900">
-                              {refUser.name || "Unknown"}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {refUser.email}
-                            </p>
+                    <tbody className="divide-y">
+                      {referralList.map((r) => (
+                        <tr key={r.id} className="hover:bg-gray-50 transition">
+                          <td className="px-6 py-4 font-semibold text-gray-800">
+                            {r.name}
                           </td>
-                          <td className="px-6 py-4 text-gray-600">
-                            {formatDate(refUser.createdAt)}
+                          <td className="px-6 py-4 text-gray-500">
+                            {formatDate(r.createdAt)}
                           </td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              Registered
+                          <td className="px-6 py-4 text-right">
+                            <span className="text-[10px] uppercase font-bold px-2 py-1 bg-green-50 text-green-600 rounded">
+                              Joined
                             </span>
                           </td>
                         </tr>
@@ -405,36 +455,31 @@ const ReferralDashboard = () => {
               )}
             </div>
 
-            {/* 3. WITHDRAWAL HISTORY */}
+            {/* Withdrawal History [cite: 135-144] */}
             {withdrawalHistory.length > 0 && (
               <div className="bg-white rounded-xl shadow-md overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
-                  <History className="w-4 h-4 text-gray-500" />
-                  <h3 className="font-bold text-gray-800">
-                    Withdrawal History
-                  </h3>
+                <div className="px-6 py-4 bg-gray-50 font-bold border-b flex items-center gap-2">
+                  <History className="w-4 h-4" /> Withdrawal History
                 </div>
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y">
                   {withdrawalHistory.map((w) => (
                     <div
                       key={w.id}
-                      className="px-6 py-4 flex justify-between items-center"
+                      className="px-6 py-4 flex justify-between items-center hover:bg-gray-50"
                     >
                       <div>
                         <p className="font-bold text-gray-900">
                           ₦{w.amount.toLocaleString()}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-[10px] text-gray-400 uppercase">
                           {formatDate(w.requestedAt)}
                         </p>
                       </div>
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-bold capitalize ${
+                        className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full ${
                           w.status === "approved"
                             ? "bg-green-100 text-green-700"
-                            : w.status === "rejected"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-yellow-100 text-yellow-700"
+                            : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
                         {w.status}

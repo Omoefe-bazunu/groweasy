@@ -31,6 +31,7 @@ import NigeriaTaxCalculator from "./Pages/BusinessTools/TaxCalculator";
 import InventoryManager from "./Pages/BusinessTools/InventoryManager";
 import CustomerManager from "./Pages/BusinessTools/CustomerManager";
 import ReferralDashboard from "./Pages/ReferralDashboard";
+import { ToastContainer } from "react-toastify";
 
 const App = () => {
   const location = useLocation();
@@ -83,6 +84,17 @@ const App = () => {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/add-expert" element={<AddExpert />} />
       </Routes>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
 
       {showNav && <BottomNav />}
     </div>
