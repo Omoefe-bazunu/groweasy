@@ -258,16 +258,10 @@ const ReferralDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-700 pb-20 relative">
       {/* Header [cite: 99-102] */}
-      <div className="bg-[#5247bf] px-6 pt-8 pb-12 text-white">
-        <div className="max-w-4xl mx-auto">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-indigo-200 mb-6 hover:text-white transition"
-          >
-            <ArrowLeft className="w-5 h-5" /> Back to Dashboard
-          </button>
+      <div className="bg-[#5247bf] px-2 pt-8 pb-12 text-white">
+        <div className="max-w-2xl mx-auto">
           <div className="flex justify-between items-center">
-            <div>
+            <div className=" text-center mx-auto">
               <h1 className="text-3xl font-bold">Partner Program</h1>
               <p className="text-indigo-200 mt-2">
                 Earn 25% commission on Pro upgrades.
