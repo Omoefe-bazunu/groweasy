@@ -175,8 +175,37 @@ export default function AdminDashboard() {
 
       toast.success("Subscription approved & commissions paid");
     } catch (err) {
-      console.error(err);
-      toast.error(err.message);
+      console.error("Approval error:", err);
+      toast.error(err.message || "Failed to approve payment");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const rejectSubscription = async (paymentId) => {
+    if (!window.confirm("Reject this payment? This cannot be undone.")) return;
+
+    setProcessingId(paymentId);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_URL}/admin/reject-payment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          paymentId: paymentId,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Rejection failed");
+
+      toast.info("Payment rejected");
+    } catch (err) {
+      console.error("Rejection error:", err);
+      toast.error(err.message || "Failed to reject payment");
     } finally {
       setProcessingId(null);
     }
@@ -211,23 +240,42 @@ export default function AdminDashboard() {
 
       toast.success("Withdrawal processed successfully");
     } catch (e) {
-      console.error(e);
-      toast.error(e.message);
+      console.error("Withdrawal error:", e);
+      toast.error(e.message || "Failed to approve withdrawal");
     } finally {
       setProcessingId(null);
     }
   };
 
-  const rejectSubscription = async (paymentId) => {
-    if (!window.confirm("Reject this payment?")) return;
+  const handleRejectWithdrawal = async (withdrawalId) => {
+    if (
+      !window.confirm("Reject this withdrawal request? This cannot be undone.")
+    )
+      return;
+
+    setProcessingId(withdrawalId);
     try {
-      await updateDoc(doc(db, "pendingPayments", paymentId), {
-        status: "rejected",
-        rejectedAt: serverTimestamp(),
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_URL}/admin/reject-withdrawal`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          withdrawalId: withdrawalId,
+        }),
       });
-      toast.info("Payment rejected");
-    } catch (err) {
-      toast.error("Failed to reject");
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Rejection failed");
+
+      toast.info("Withdrawal rejected");
+    } catch (e) {
+      console.error("Rejection error:", e);
+      toast.error(e.message || "Failed to reject withdrawal");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -443,65 +491,127 @@ export default function AdminDashboard() {
                         .map((req) => (
                           <div
                             key={req.id}
-                            className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg flex flex-col md:flex-row justify-between items-start gap-4"
+                            className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg"
                           >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <p className="font-bold text-gray-800 text-lg">
-                                  {req.userName}
-                                </p>
-                                <span className="text-sm text-gray-500">
-                                  ({req.email})
-                                </span>
-                              </div>
-                              <p className="text-2xl font-bold text-[#5247bf] mb-3">
-                                ₦{req.amount.toLocaleString()}
-                              </p>
-
-                              {/* --- IMPROVED BANK DETAILS DISPLAY --- */}
-                              <div className="flex items-center gap-2 bg-white border border-gray-300 p-3 rounded-lg max-w-md">
-                                <div className="flex-1">
-                                  <p className="text-xs text-gray-500 uppercase font-semibold">
-                                    Bank Details
+                            <div className="flex flex-col lg:flex-row justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <p className="font-bold text-gray-800 text-lg">
+                                    {req.userName}
                                   </p>
-                                  <p className="text-gray-800 font-medium whitespace-pre-line">
-                                    {req.bankDetails || "No details provided"}
-                                  </p>
+                                  <span className="text-sm text-gray-500">
+                                    ({req.email})
+                                  </span>
                                 </div>
+                                <p className="text-2xl font-bold text-[#5247bf] mb-3">
+                                  ₦{req.amount.toLocaleString()}
+                                </p>
+
+                                {/* Bank Details with Copy */}
+                                <div className="flex items-start gap-2 bg-white border border-gray-300 p-3 rounded-lg max-w-md mb-2">
+                                  <div className="flex-1">
+                                    <p className="text-xs text-gray-500 uppercase font-semibold">
+                                      Bank Details
+                                    </p>
+                                    <p className="text-gray-800 font-medium whitespace-pre-line">
+                                      {req.bankDetails || "No details provided"}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      copyToClipboard(req.bankDetails)
+                                    }
+                                    className="p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600 rounded transition"
+                                    title="Copy Bank Details"
+                                  >
+                                    <Copy className="w-5 h-5" />
+                                  </button>
+                                </div>
+
+                                <p className="text-xs text-gray-400">
+                                  Requested:{" "}
+                                  {req.requestedAt?.toDate().toLocaleString()}
+                                </p>
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div className="flex gap-2 self-start lg:self-center">
                                 <button
-                                  onClick={() =>
-                                    copyToClipboard(req.bankDetails)
-                                  }
-                                  className="p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600 rounded transition"
-                                  title="Copy Bank Details"
+                                  onClick={() => handleApproveWithdrawal(req)}
+                                  disabled={processingId === req.id}
+                                  className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:bg-gray-400 font-bold shadow-md transition"
                                 >
-                                  <Copy className="w-5 h-5" />
+                                  {processingId === req.id ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                  ) : (
+                                    <Check className="w-5 h-5" />
+                                  )}
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleRejectWithdrawal(req.id)}
+                                  disabled={processingId === req.id}
+                                  className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 flex items-center gap-2 disabled:bg-gray-400 font-bold shadow-md transition"
+                                >
+                                  {processingId === req.id ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-5 h-5" />
+                                  )}
+                                  Reject
                                 </button>
                               </div>
-
-                              <p className="text-xs text-gray-400 mt-2">
-                                Requested:{" "}
-                                {req.requestedAt?.toDate().toLocaleString()}
-                              </p>
                             </div>
-                            <button
-                              onClick={() => handleApproveWithdrawal(req)}
-                              disabled={processingId === req.id}
-                              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:bg-gray-400 mt-2 md:mt-0 font-bold shadow-md"
-                            >
-                              {processingId === req.id ? (
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                              ) : (
-                                <Check className="w-5 h-5" />
-                              )}{" "}
-                              Mark Paid
-                            </button>
                           </div>
                         ))}
                     </div>
                   )}
 
-                  {/* Top Referrers */}
+                  {/* Processed Withdrawals History */}
+                  {withdrawalRequests.filter((r) => r.status !== "pending")
+                    .length > 0 && (
+                    <>
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 mt-8">
+                        Withdrawal History
+                      </h3>
+                      <div className="space-y-3 mb-8">
+                        {withdrawalRequests
+                          .filter((r) => r.status !== "pending")
+                          .slice(0, 10) // Show last 10
+                          .map((req) => (
+                            <div
+                              key={req.id}
+                              className="bg-gray-50 border border-gray-200 p-4 rounded-lg flex justify-between items-center"
+                            >
+                              <div>
+                                <p className="font-medium text-gray-800">
+                                  {req.userName}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  ₦{req.amount.toLocaleString()}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {formatDate(
+                                    req.processedAt || req.rejectedAt
+                                  )}
+                                </p>
+                              </div>
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                  req.status === "approved"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-red-100 text-red-700"
+                                }`}
+                              >
+                                {req.status.toUpperCase()}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Top Referrers - Keep as is */}
                   <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
                     Top Referrers
                   </h3>

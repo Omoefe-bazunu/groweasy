@@ -10,7 +10,7 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
-import { Check, Copy, Lock, Upload, Loader2, Calendar } from "lucide-react";
+import { Check, Copy, Upload, Loader2, AlertCircle } from "lucide-react";
 
 const Subscribe = () => {
   const { user, userData } = useUser();
@@ -25,6 +25,7 @@ const Subscribe = () => {
   // State for dynamic pricing
   const [monthlyFee, setMonthlyFee] = useState(3000); // Default fallback
   const [loadingPrice, setLoadingPrice] = useState(true);
+  const [priceError, setPriceError] = useState("");
 
   const bankDetails = {
     bankName: "Kuda MicroFinance Bank",
@@ -36,17 +37,44 @@ const Subscribe = () => {
   useEffect(() => {
     const fetchPricing = async () => {
       try {
-        const settingsSnap = await getDoc(doc(db, "admin", "settings"));
+        console.log("🔍 Fetching pricing from Firestore...");
+
+        // Try to get settings document
+        const settingsRef = doc(db, "admin", "settings");
+        const settingsSnap = await getDoc(settingsRef);
+
         if (settingsSnap.exists()) {
-          const fee = settingsSnap.data().monthlySubscriptionFee;
-          if (fee) setMonthlyFee(Number(fee));
+          const data = settingsSnap.data();
+          console.log("📦 Settings data:", data);
+
+          // Check for the fee in different possible field names
+          const fee =
+            data.monthlySubscriptionFee ||
+            data.subscriptionFee ||
+            data.monthlyFee ||
+            data.price;
+
+          if (fee && !isNaN(Number(fee))) {
+            const feeNumber = Number(fee);
+            console.log("✅ Pricing loaded:", feeNumber);
+            setMonthlyFee(feeNumber);
+            setPriceError("");
+          } else {
+            console.warn("⚠️ Fee field exists but is invalid:", fee);
+            setPriceError("Using default pricing (₦3,000)");
+          }
+        } else {
+          console.warn("⚠️ Settings document does not exist at admin/settings");
+          setPriceError("Using default pricing (₦3,000)");
         }
       } catch (error) {
-        console.error("Error fetching pricing:", error);
+        console.error("❌ Error fetching pricing:", error);
+        setPriceError("Using default pricing (₦3,000)");
       } finally {
         setLoadingPrice(false);
       }
     };
+
     fetchPricing();
   }, []);
 
@@ -55,11 +83,13 @@ const Subscribe = () => {
     monthly: {
       name: "Monthly",
       amount: monthlyFee.toLocaleString(),
+      rawAmount: monthlyFee,
       duration: "30 days",
     },
     yearly: {
       name: "Yearly",
       amount: (monthlyFee * 12).toLocaleString(),
+      rawAmount: monthlyFee * 12,
       duration: "365 days",
       bestValue: true,
     },
@@ -110,7 +140,8 @@ const Subscribe = () => {
         userEmail: user.email,
         userName: userData?.name || "User",
         plan: plan,
-        amount: plans[plan].amount, // Saves the dynamic amount at time of request
+        amount: plans[plan].rawAmount, // Save raw number for backend processing
+        amountDisplay: plans[plan].amount, // Human-readable version
         paymentScreenshot: downloadURL,
         requestedAt: serverTimestamp(),
         status: "pending",
@@ -157,11 +188,8 @@ const Subscribe = () => {
   if (loadingPrice) {
     return (
       <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
-        <div className="flex space-x-2">
-          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse"></span>
-          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-200"></span>
-          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-400"></span>
-        </div>
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
+        <p className="text-gray-600">Loading pricing information...</p>
       </section>
     );
   }
@@ -169,6 +197,21 @@ const Subscribe = () => {
   return (
     <div className="min-h-screen text-gray-700 bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 pb-25 pt-6 px-6">
       <div className="max-w-4xl mx-auto">
+        {/* Price Error Alert */}
+        {priceError && (
+          <div className="mb-6 max-w-2xl mx-auto bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-yellow-800 font-medium">
+                {priceError}
+              </p>
+              <p className="text-xs text-yellow-700 mt-1">
+                Contact support if this seems incorrect.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="text-center mb-12 max-w-2xl mx-auto bg-orange-500 p-8 rounded-2xl shadow-lg">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
             Upgrade to Pro
@@ -336,7 +379,7 @@ const Subscribe = () => {
         </div>
 
         {copied && (
-          <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
+          <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in">
             <Check className="w-5 h-5" /> Copied!
           </div>
         )}
