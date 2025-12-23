@@ -28,7 +28,7 @@ import { toast } from "react-toastify";
 
 const ReferralDashboard = () => {
   const navigate = useNavigate();
-  const { user, userData } = useUser(); // Accesses global real-time user data [cite: 62, 152]
+  const { user, userData } = useUser();
 
   // Dashboard States
   const [generating, setGenerating] = useState(false);
@@ -52,7 +52,7 @@ const ReferralDashboard = () => {
 
     const fetchData = async () => {
       try {
-        // Fetch users referred by the current user using UID for security [cite: 65]
+        // Fetch users referred by the current user using UID for security
         const usersRef = collection(db, "users");
         const qUsers = query(
           usersRef,
@@ -62,7 +62,7 @@ const ReferralDashboard = () => {
         const userSnaps = await getDocs(qUsers);
         setReferralList(userSnaps.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-        // Fetch withdrawal history [cite: 67-69]
+        // Fetch withdrawal history
         const withdrawRef = collection(db, "withdrawals");
         const qWithdraw = query(
           withdrawRef,
@@ -83,61 +83,7 @@ const ReferralDashboard = () => {
     fetchData();
   }, [user]);
 
-  // 2. Withdrawal Submission via Backend API [cite: 191, 192]
-  //   const handleSubmitWithdrawal = async (e) => {
-  //     e.preventDefault();
-  //     if (!user || withdrawing) return;
-
-  //     const amountNum = Number(withdrawAmount);
-  //     if (amountNum < 500) return toast.warn("Minimum withdrawal is ₦500");
-
-  //     setWithdrawing(true);
-  //     try {
-  //       const token = await user.getIdToken();
-  //       const response = await fetch(
-  //         `${import.meta.env.VITE_API_URL}/referral/request-withdrawal`,
-  //         {
-  //           method: "POST",
-  //           headers: {
-  //             "Content-Type": "application/json",
-  //             Authorization: `Bearer ${token}`,
-  //           },
-  //           body: JSON.stringify({
-  //             amount: amountNum,
-  //             bankDetails: bankDetails,
-  //           }),
-  //         }
-  //       );
-
-  //       const result = await response.json();
-
-  //       if (!response.ok) {
-  //         throw new Error(result.error || "Failed to submit request");
-  //       }
-
-  //       toast.success(result.message);
-  //       setShowForm(false); // Corrected variable name
-  //       setWithdrawAmount("");
-  //       setBankDetails("");
-
-  //       // Optimistic UI Update for immediate feedback
-  //       setWithdrawalHistory((prev) => [
-  //         {
-  //           id: result.withdrawalId || Date.now().toString(),
-  //           status: "pending",
-  //           amount: amountNum,
-  //           requestedAt: { toDate: () => new Date() },
-  //         },
-  //         ...prev,
-  //       ]);
-  //     } catch (error) {
-  //       console.error("Submission error:", error);
-  //       toast.error(error.message);
-  //     } finally {
-  //       setWithdrawing(false);
-  //     }
-  //   };
-
+  // 2. Withdrawal Submission via Backend API
   const handleSubmitWithdrawal = async (e) => {
     e.preventDefault();
     if (!user || withdrawing) return;
@@ -178,7 +124,7 @@ const ReferralDashboard = () => {
       setWithdrawAmount("");
       setBankDetails("");
 
-      // Optimistic UI Update [cite: 93]
+      // Optimistic UI Update
       setWithdrawalHistory((prev) => [
         {
           id: result.withdrawalId || Date.now().toString(),
@@ -196,7 +142,7 @@ const ReferralDashboard = () => {
     }
   };
 
-  // 3. Link Management [cite: 74-78]
+  // 3. Link Management
   const generateReferralLink = async () => {
     setGenerating(true);
     try {
@@ -236,7 +182,7 @@ const ReferralDashboard = () => {
     }
   };
 
-  // Date Formatting Helper [cite: 96-98]
+  // Date Formatting Helper
   const formatDate = (ts) => {
     if (!ts) return "-";
     const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -247,7 +193,7 @@ const ReferralDashboard = () => {
     });
   };
 
-  // Loading Guard [cite: 150, 154]
+  // Loading Guard
   if (!user || !userData)
     return (
       <div className="h-screen flex items-center justify-center">
@@ -257,7 +203,7 @@ const ReferralDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-700 pb-20 relative">
-      {/* Header [cite: 99-102] */}
+      {/* Header */}
       <div className="bg-[#5247bf] px-2 pt-8 pb-12 text-white">
         <div className="max-w-2xl mx-auto">
           <div className="flex justify-between items-center">
@@ -280,7 +226,7 @@ const ReferralDashboard = () => {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 -mt-8 space-y-6">
-        {/* Referral Status / CTA [cite: 104-107] */}
+        {/* Referral Status / CTA */}
         {!userData.referralCode ? (
           <div className="bg-white rounded-xl shadow-lg p-10 text-center">
             <Users className="w-12 h-12 text-[#5247bf] mx-auto mb-4" />
@@ -299,7 +245,7 @@ const ReferralDashboard = () => {
           </div>
         ) : (
           <>
-            {/* Stats Overview [cite: 108-115] */}
+            {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-[#5247bf]">
                 <p className="text-gray-500 text-sm mb-1">Wallet Balance</p>
@@ -307,13 +253,10 @@ const ReferralDashboard = () => {
                   ₦{(userData.walletBalance || 0).toLocaleString()}
                 </p>
                 <button
-                  onClick={() => setShowForm(!showForm)}
+                  onClick={() => setShowForm(true)}
                   className="mt-4 w-full cursor-pointer text-white bg-[#5247bf] rounded-lg font-bold hover:bg-[#190f6e] transition flex items-center justify-center gap-2 py-2"
                 >
                   Withdraw Funds
-                  <ChevronDown
-                    className={`w-5 h-5 transition-transform ${showForm ? "rotate-180" : ""}`}
-                  />
                 </button>
               </div>
               <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-green-500">
@@ -332,69 +275,71 @@ const ReferralDashboard = () => {
 
             {/* Withdrawal Form Section */}
             {showForm && (
-              <div className="bg-white p-6 rounded-xl shadow-md animate-in slide-in-from-top duration-300">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">
-                    Withdraw Funds
-                  </h3>
-                  <button
-                    onClick={() => setShowForm(false)}
-                    className="p-2 hover:bg-gray-200 rounded-full transition"
-                  >
-                    <X className="w-5 h-5 text-gray-500" />
-                  </button>
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white p-6 rounded-xl shadow-md max-w-md w-full mx-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold text-gray-800">
+                      Withdraw Funds
+                    </h3>
+                    <button
+                      onClick={() => setShowForm(false)}
+                      className="p-2 hover:bg-gray-200 rounded-full transition"
+                    >
+                      <X className="w-5 h-5 text-gray-500" />
+                    </button>
+                  </div>
+                  <form onSubmit={handleSubmitWithdrawal} className="space-y-5">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Amount to Withdraw (₦)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 5000"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="w-full p-4 rounded-xl border border-gray-200 focus:border-[#5247bf] focus:ring-2 focus:ring-[#5247bf]/20 outline-none transition"
+                        required
+                      />
+                      <p className="text-[11px] text-gray-400 mt-2">
+                        Available Balance: ₦
+                        {(userData.walletBalance || 0).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Bank Name, Account Number & Name
+                      </label>
+                      <textarea
+                        placeholder="Kuda Bank, 1234567890, John Doe"
+                        value={bankDetails}
+                        onChange={(e) => setBankDetails(e.target.value)}
+                        className="w-full p-4 rounded-xl border border-gray-200 focus:border-[#5247bf] focus:ring-2 focus:ring-[#5247bf]/20 outline-none transition h-32 resize-none"
+                        required
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={withdrawing}
+                      className="w-full bg-[#5247bf] text-white py-4 rounded-xl font-bold shadow-lg hover:bg-[#4238a6] transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                    >
+                      {withdrawing ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />{" "}
+                          Submitting Request...
+                        </>
+                      ) : (
+                        "Request Withdrawal"
+                      )}
+                    </button>
+                  </form>
                 </div>
-                <form onSubmit={handleSubmitWithdrawal} className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Amount to Withdraw (₦)
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 5000"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="w-full p-4 rounded-xl border border-gray-200 focus:border-[#5247bf] focus:ring-2 focus:ring-[#5247bf]/20 outline-none transition"
-                      required
-                    />
-                    <p className="text-[11px] text-gray-400 mt-2">
-                      Available Balance: ₦
-                      {(userData.walletBalance || 0).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Bank Name, Account Number & Name
-                    </label>
-                    <textarea
-                      placeholder="Kuda Bank, 1234567890, John Doe"
-                      value={bankDetails}
-                      onChange={(e) => setBankDetails(e.target.value)}
-                      className="w-full p-4 rounded-xl border border-gray-200 focus:border-[#5247bf] focus:ring-2 focus:ring-[#5247bf]/20 outline-none transition h-32 resize-none"
-                      required
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={withdrawing}
-                    className="w-full bg-[#5247bf] text-white py-4 rounded-xl font-bold shadow-lg hover:bg-[#4238a6] transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
-                  >
-                    {withdrawing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" /> Submitting
-                        Request...
-                      </>
-                    ) : (
-                      "Request Withdrawal"
-                    )}
-                  </button>
-                </form>
               </div>
             )}
 
-            {/* Referral Link Box [cite: 116-121] */}
+            {/* Referral Link Box */}
             <div className="bg-white p-6 rounded-xl shadow-md flex gap-2">
               <div className="flex-1 bg-gray-50 p-3.5 rounded-xl text-gray-600 truncate text-sm font-mono border">
                 {window.location.origin}/signup?ref={userData.referralCode}
@@ -411,7 +356,7 @@ const ReferralDashboard = () => {
               </button>
             </div>
 
-            {/* History Tables [cite: 122-134] */}
+            {/* History Tables */}
             <div className="bg-white rounded-xl shadow-md overflow-hidden">
               <div className="px-6 py-4 bg-gray-50 font-bold border-b text-gray-700">
                 Referral History
@@ -449,7 +394,7 @@ const ReferralDashboard = () => {
               )}
             </div>
 
-            {/* Withdrawal History [cite: 135-144] */}
+            {/* Withdrawal History */}
             {withdrawalHistory.length > 0 && (
               <div className="bg-white rounded-xl shadow-md overflow-hidden">
                 <div className="px-6 py-4 bg-gray-50 font-bold border-b flex items-center gap-2">
