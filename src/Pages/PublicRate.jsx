@@ -73,7 +73,7 @@ const PublicRate = () => {
           Your feedback matters to us.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-8 text-gray-700">
           <div className="flex justify-center gap-2">
             {[1, 2, 3, 4, 5].map((star) => (
               <button key={star} type="button" onClick={() => setRating(star)}>

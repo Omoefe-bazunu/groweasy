@@ -141,7 +141,7 @@ const CustomerSatisfaction = () => {
   if (loading)
     return (
       <div className="p-20 text-center font-bold text-[#5247bf]">
-        Loading Dashboard...
+        Loading ...
       </div>
     );
 
