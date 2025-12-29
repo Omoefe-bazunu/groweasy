@@ -114,7 +114,7 @@ const ContentCreationBoard = () => {
         </div>
 
         {/* Content Grid: Responsive columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-20">
           {creationOptions.map((option) => (
             <div
               key={option.id}
