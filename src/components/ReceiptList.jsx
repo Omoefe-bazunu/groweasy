@@ -52,7 +52,7 @@ const ReceiptsList = () => {
       const q = query(
         collection(db, "receipts"),
         where("userId", "==", user.uid),
-        orderBy("createdAt", "desc")
+        orderBy("createdAt", "desc"),
       );
       const querySnapshot = await getDocs(q);
       const receiptsData = querySnapshot.docs.map((doc) => ({
@@ -83,14 +83,14 @@ const ReceiptsList = () => {
             ?.toLowerCase()
             .includes(searchText.toLowerCase()) ||
           receipt.items?.some((item) =>
-            item.details?.toLowerCase().includes(searchText.toLowerCase())
+            item.details?.toLowerCase().includes(searchText.toLowerCase()),
           ) ||
           receipt.paymentMethod
             ?.toLowerCase()
             .includes(searchText.toLowerCase()) ||
           receipt.signatureName
             ?.toLowerCase()
-            .includes(searchText.toLowerCase())
+            .includes(searchText.toLowerCase()),
       );
     }
 
@@ -127,7 +127,7 @@ const ReceiptsList = () => {
 
     const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
     const balance = parseFloat(
-      calculateBalance(receipt.total, receipt.amountPaid)
+      calculateBalance(receipt.total, receipt.amountPaid),
     );
     const dailyRate = parseFloat(receipt.interestRate) / 100 / 365;
 
@@ -143,7 +143,7 @@ const ReceiptsList = () => {
 
     if (
       !window.confirm(
-        "Are you sure you want to delete this receipt? This action cannot be undone."
+        "Are you sure you want to delete this receipt? This action cannot be undone.",
       )
     ) {
       return;
@@ -154,7 +154,7 @@ const ReceiptsList = () => {
       await deleteDoc(doc(db, "receipts", receiptId));
       setReceipts(receipts.filter((rec) => rec.id !== receiptId));
       setFilteredReceipts(
-        filteredReceipts.filter((rec) => rec.id !== receiptId)
+        filteredReceipts.filter((rec) => rec.id !== receiptId),
       );
       toast.success("Receipt deleted successfully!");
     } catch (error) {
@@ -375,7 +375,7 @@ const ReceiptsList = () => {
                   }
                 </td>
               </tr>
-            `
+            `,
               )
               .join("")}
           </tbody>
@@ -385,7 +385,7 @@ const ReceiptsList = () => {
               <td style="padding: 8px; text-align: right; font-weight: bold; color: ${
                 receipt.brandColor || "#000"
               }; border: 1px solid #ddd;">₦${parseFloat(
-                receipt.total
+                receipt.total,
               ).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -396,7 +396,7 @@ const ReceiptsList = () => {
               <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">
                 ₦${parseFloat(receipt.amountPaid || "0.00").toLocaleString(
                   "en-NG",
-                  { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                  { minimumFractionDigits: 2, maximumFractionDigits: 2 },
                 )}
                 ${
                   receipt.paymentMethod
@@ -410,7 +410,7 @@ const ReceiptsList = () => {
               <td style="padding: 8px; text-align: right; font-weight: bold; color: ${
                 receipt.brandColor || "#000"
               }; border: 1px solid #ddd;">₦${parseFloat(
-                calculateBalance(receipt.total, receipt.amountPaid)
+                calculateBalance(receipt.total, receipt.amountPaid),
               ).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -442,7 +442,7 @@ const ReceiptsList = () => {
               <tr>
                 <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Interest Charges:</td>
                 <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">₦${parseFloat(
-                  calculateInterestCharges(receipt)
+                  calculateInterestCharges(receipt),
                 ).toLocaleString("en-NG", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
@@ -617,7 +617,7 @@ const ReceiptsList = () => {
                       <span className="font-semibold">
                         ₦
                         {parseFloat(
-                          calculateBalance(receipt.total, receipt.amountPaid)
+                          calculateBalance(receipt.total, receipt.amountPaid),
                         ).toLocaleString("en-NG", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,

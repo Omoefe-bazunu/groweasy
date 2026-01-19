@@ -79,7 +79,7 @@ const ReceiptCreator = () => {
     formData.items.reduce(
       (sum, item) =>
         sum + calculateFinalAmount(item.qty, item.unitPrice, item.discount),
-      0
+      0,
     );
   const calculateOutstandingBalance = () =>
     calculateTotal() - (parseFloat(formData.amountPaid) || 0);

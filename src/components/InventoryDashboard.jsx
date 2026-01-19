@@ -10,7 +10,8 @@ import {
   X,
   Loader2,
   Lock,
-  TrendingUp, // Added icon for Profit
+  TrendingUp,
+  BarChart3, // Added icon for Sales
 } from "lucide-react";
 import { db } from "../lib/firebase";
 import { doc, deleteDoc, updateDoc } from "firebase/firestore";
@@ -37,7 +38,12 @@ const InventoryDashboard = ({ inventory, loading }) => {
     0,
   );
 
-  // New: Calculate Total Potential Profit
+  // NEW: Calculate Total Potential Sales
+  const totalSales = inventory.reduce(
+    (sum, item) => sum + item.quantity * item.sellPrice,
+    0,
+  );
+
   const totalProfit = inventory.reduce(
     (sum, item) => sum + (item.sellPrice - item.costPrice) * item.quantity,
     0,
@@ -129,15 +135,25 @@ const InventoryDashboard = ({ inventory, loading }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Summary Cards - Grid updated to col-6 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <p className="text-gray-500 text-xs">Inventory Value</p>
           <p className="text-lg font-bold text-[#8b5cf6]">
             {formatCurrency(totalValue)}
           </p>
         </div>
-        {/* NEW: Total Profit Card */}
+
+        {/* NEW: Total Sales Card */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100">
+          <p className="text-gray-500 text-xs flex items-center gap-1">
+            Total Sales <BarChart3 className="w-3 h-3 text-blue-600" />
+          </p>
+          <p className="text-lg font-bold text-blue-600">
+            {formatCurrency(totalSales)}
+          </p>
+        </div>
+
         <div className="bg-white p-4 rounded-xl shadow-sm border border-green-100 ">
           <p className="text-gray-500 text-xs flex items-center gap-1">
             Total Profit <TrendingUp className="w-3 h-3 text-green-600" />
@@ -146,10 +162,12 @@ const InventoryDashboard = ({ inventory, loading }) => {
             {formatCurrency(totalProfit)}
           </p>
         </div>
+
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <p className="text-gray-500 text-xs">Products</p>
           <p className="text-lg font-bold text-gray-800">{totalItems}</p>
         </div>
+
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <p className="text-gray-500 text-xs">Low Stock</p>
           <p
@@ -158,6 +176,7 @@ const InventoryDashboard = ({ inventory, loading }) => {
             {lowStockItems}
           </p>
         </div>
+
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <p className="text-gray-500 text-xs">Out of Stock</p>
           <p
@@ -236,7 +255,6 @@ const InventoryDashboard = ({ inventory, loading }) => {
                     <td className="px-6 py-4 text-right text-gray-600">
                       {formatCurrency(item.sellPrice)}
                     </td>
-                    {/* NEW: Profit Column */}
                     <td className="px-6 py-4 text-right font-bold text-green-600 bg-green-50/20">
                       {formatCurrency(profitPerUnit)}
                     </td>
@@ -276,7 +294,7 @@ const InventoryDashboard = ({ inventory, loading }) => {
         </div>
       </div>
 
-      {/* Edit Modal (Logic shared with previous version) */}
+      {/* Edit Modal */}
       {editingProduct && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
