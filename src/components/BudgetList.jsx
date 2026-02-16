@@ -18,6 +18,8 @@ import {
   Search,
 } from "lucide-react";
 import BudgetCreator from "./BudgetCreator";
+// ✅ Import supported currencies for fallback
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const STATUS_COLORS = {
   Active: "bg-green-100 text-green-700",
@@ -109,11 +111,15 @@ const BudgetList = () => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const formatCurrency = (val) =>
-    parseFloat(val || 0).toLocaleString("en-NG", {
+  // ✅ Updated Dynamic Formatter with currencyObj parameter
+  const formatCurrency = (val, currencyObj) => {
+    const curr = currencyObj || SUPPORTED_CURRENCIES[0];
+    return new Intl.NumberFormat(curr.locale, {
+      style: "currency",
+      currency: curr.code,
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    }).format(parseFloat(val || 0));
+  };
 
   const getBudgetTotals = (items = []) => {
     const totalAllocated = items.reduce(
@@ -161,7 +167,6 @@ const BudgetList = () => {
     );
   }
 
-  // Show create or edit form inline
   if (showCreateForm || editingBudget) {
     return (
       <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -182,7 +187,6 @@ const BudgetList = () => {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-600 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* ── Header ──────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
@@ -225,7 +229,6 @@ const BudgetList = () => {
           </button>
         </div>
 
-        {/* ── Filters ─────────────────────────────────────────── */}
         <div className="bg-white rounded-xl shadow-md p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -251,7 +254,6 @@ const BudgetList = () => {
           </div>
         </div>
 
-        {/* ── Empty State ─────────────────────────────────────── */}
         {filteredBudgets.length === 0 ? (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
             <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -319,7 +321,6 @@ const BudgetList = () => {
 
                   return (
                     <Fragment key={budget.id}>
-                      {/* ── Main Row ── */}
                       <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="p-3">
                           <button
@@ -358,16 +359,17 @@ const BudgetList = () => {
                           <span>{budget.endDate}</span>
                         </td>
                         <td className="p-3 text-right font-semibold text-gray-900">
-                          ₦{formatCurrency(totalAllocated)}
+                          {/* ✅ Dynamic Currency Logic */}
+                          {formatCurrency(totalAllocated, budget.currency)}
                         </td>
                         <td className="p-3 text-right font-semibold text-gray-700">
-                          ₦{formatCurrency(totalActual)}
+                          {formatCurrency(totalActual, budget.currency)}
                         </td>
                         <td
                           className={`p-3 text-right font-bold ${getVarianceColor(variance)}`}
                         >
-                          {variance >= 0 ? "+" : ""}₦
-                          {formatCurrency(Math.abs(variance))}
+                          {variance >= 0 ? "+" : "-"}
+                          {formatCurrency(Math.abs(variance), budget.currency)}
                         </td>
                         <td className="p-3">
                           <span
@@ -391,7 +393,6 @@ const BudgetList = () => {
                             <button
                               onClick={() => handleDelete(budget.id)}
                               disabled={!isPaid || deleting === budget.id}
-                              title={!isPaid ? "Upgrade to delete" : "Delete"}
                               className={`px-3 py-1.5 rounded transition flex items-center justify-center ${
                                 !isPaid
                                   ? "bg-gray-300 text-gray-500 cursor-not-allowed"
@@ -410,70 +411,70 @@ const BudgetList = () => {
                         </td>
                       </tr>
 
-                      {/* ── Expanded Items Row ── */}
                       {isExpanded && (
                         <tr className="bg-gray-50 border-b border-gray-200">
                           <td colSpan={9} className="px-6 py-4">
-                            {/* Income/Expense summary bar */}
                             <div className="flex flex-wrap gap-4 mb-4">
                               <div className="flex items-center gap-1.5 text-sm">
                                 <TrendingUp className="w-4 h-4 text-green-600" />
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 font-medium">
                                   Budgeted Income:
                                 </span>
-                                <span className="font-semibold text-green-600">
-                                  ₦{formatCurrency(totalIncome)}
+                                <span className="font-bold text-green-600">
+                                  {formatCurrency(totalIncome, budget.currency)}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 text-sm">
                                 <TrendingDown className="w-4 h-4 text-red-500" />
-                                <span className="text-gray-600">
+                                <span className="text-gray-600 font-medium">
                                   Budgeted Expenses:
                                 </span>
-                                <span className="font-semibold text-red-500">
-                                  ₦{formatCurrency(totalExpense)}
+                                <span className="font-bold text-red-500">
+                                  {formatCurrency(
+                                    totalExpense,
+                                    budget.currency,
+                                  )}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-sm">
-                                <span className="text-gray-600">
+                              <div className="flex items-center gap-1.5 text-sm border-l pl-4 border-gray-300">
+                                <span className="text-gray-600 font-medium">
                                   Net Budget:
                                 </span>
                                 <span
-                                  className={`font-semibold ${
+                                  className={`font-bold ${
                                     totalIncome - totalExpense >= 0
                                       ? "text-green-600"
                                       : "text-red-600"
                                   }`}
                                 >
-                                  ₦
                                   {formatCurrency(
-                                    Math.abs(totalIncome - totalExpense),
+                                    totalIncome - totalExpense,
+                                    budget.currency,
                                   )}
                                 </span>
                               </div>
                             </div>
 
-                            {/* Items table */}
-                            <div className="overflow-x-auto rounded-lg border border-gray-200">
+                            <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
                               <table className="w-full text-xs">
-                                <thead className="bg-white border-b border-gray-200">
+                                <thead className="bg-gray-100 border-b border-gray-200">
                                   <tr>
-                                    <th className="p-2.5 text-left font-semibold text-gray-600">
+                                    <th className="p-2.5 text-left font-bold text-gray-700">
                                       Category
                                     </th>
-                                    <th className="p-2.5 text-left font-semibold text-gray-600">
+                                    <th className="p-2.5 text-left font-bold text-gray-700">
                                       Type
                                     </th>
-                                    <th className="p-2.5 text-right font-semibold text-gray-600">
+                                    <th className="p-2.5 text-right font-bold text-gray-700">
                                       Allocated
                                     </th>
-                                    <th className="p-2.5 text-right font-semibold text-gray-600">
+                                    <th className="p-2.5 text-right font-bold text-gray-700">
                                       Actual
                                     </th>
-                                    <th className="p-2.5 text-right font-semibold text-gray-600">
+                                    <th className="p-2.5 text-right font-bold text-gray-700">
                                       Variance
                                     </th>
-                                    <th className="p-2.5 text-left font-semibold text-gray-600">
+                                    <th className="p-2.5 text-left font-bold text-gray-700">
                                       Notes
                                     </th>
                                   </tr>
@@ -489,43 +490,48 @@ const BudgetList = () => {
                                     return (
                                       <tr
                                         key={idx}
-                                        className={`border-b border-gray-100 last:border-0 ${
-                                          isOverBudget
-                                            ? "bg-red-50"
-                                            : "bg-white"
+                                        className={`border-b border-gray-50 last:border-0 ${
+                                          isOverBudget ? "bg-red-50" : ""
                                         }`}
                                       >
-                                        <td className="p-2.5 font-medium text-gray-800">
+                                        <td className="p-2.5 font-bold text-gray-900">
                                           {item.category}
                                         </td>
                                         <td className="p-2.5">
                                           <span
-                                            className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter ${
                                               item.type === "income"
-                                                ? "bg-green-100 text-green-700"
-                                                : "bg-red-100 text-red-700"
+                                                ? "bg-green-100 text-green-800"
+                                                : "bg-red-100 text-red-800"
                                             }`}
                                           >
                                             {item.type}
                                           </span>
                                         </td>
-                                        <td className="p-2.5 text-right text-gray-700">
-                                          ₦{formatCurrency(item.allocated)}
+                                        <td className="p-2.5 text-right font-medium text-gray-900">
+                                          {formatCurrency(
+                                            item.allocated,
+                                            budget.currency,
+                                          )}
                                         </td>
-                                        <td className="p-2.5 text-right text-gray-700">
+                                        <td className="p-2.5 text-right font-medium text-gray-900">
                                           {parseFloat(item.actual) > 0
-                                            ? `₦${formatCurrency(item.actual)}`
+                                            ? formatCurrency(
+                                                item.actual,
+                                                budget.currency,
+                                              )
                                             : "-"}
                                         </td>
                                         <td
-                                          className={`p-2.5 text-right font-semibold ${getVarianceColor(itemVariance)}`}
+                                          className={`p-2.5 text-right font-black ${getVarianceColor(itemVariance)}`}
                                         >
-                                          {itemVariance >= 0 ? "+" : ""}₦
+                                          {itemVariance >= 0 ? "+" : "-"}
                                           {formatCurrency(
                                             Math.abs(itemVariance),
+                                            budget.currency,
                                           )}
                                         </td>
-                                        <td className="p-2.5 text-gray-500 italic">
+                                        <td className="p-2.5 text-gray-600 italic">
                                           {item.notes || "-"}
                                         </td>
                                       </tr>
@@ -545,7 +551,6 @@ const BudgetList = () => {
           </div>
         )}
 
-        {/* Limit / Upgrade Modal */}
         {showLimitModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">
@@ -553,19 +558,19 @@ const BudgetList = () => {
               <h3 className="text-2xl font-bold text-gray-900 mb-3">
                 Feature Locked
               </h3>
-              <p className="text-gray-600 mb-8">
+              <p className="text-gray-600 mb-8 font-medium">
                 Deleting budgets is available for <strong>Pro</strong> users
                 only. Upgrade now to manage your budgets freely.
               </p>
               <button
                 onClick={() => (window.location.href = "/subscribe")}
-                className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-semibold hover:bg-[#4238a6] transition"
+                className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-bold hover:bg-[#4238a6] transition"
               >
                 Subscribe Now
               </button>
               <button
                 onClick={() => setShowLimitModal(false)}
-                className="w-full mt-3 text-gray-600 hover:text-gray-800"
+                className="w-full mt-3 text-gray-500 font-bold"
               >
                 Close
               </button>

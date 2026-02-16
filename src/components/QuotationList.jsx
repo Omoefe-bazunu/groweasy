@@ -15,6 +15,7 @@ import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import api from "../lib/api";
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const QuotationsList = () => {
   const { user } = useUser();
@@ -37,7 +38,6 @@ const QuotationsList = () => {
     filterQuotations();
   }, [searchText, searchDate, quotations]);
 
-  // ✅ Fetch from backend instead of Firestore directly
   const fetchQuotations = async () => {
     if (!user) return;
     setLoading(true);
@@ -69,7 +69,6 @@ const QuotationsList = () => {
     setFilteredQuotations(filtered);
   };
 
-  // ✅ Delete via backend — backend enforces isPaid check
   const deleteQuotation = async (id) => {
     if (!isPaid) {
       setShowLimitModal(true);
@@ -93,7 +92,16 @@ const QuotationsList = () => {
     }
   };
 
-  // ── Download helpers (unchanged — purely client-side) ─────────────────────
+  // ✅ Reusable helper for dynamic currency formatting
+  const formatCurrencyValue = (value, currencyObj) => {
+    const curr = currencyObj || SUPPORTED_CURRENCIES[0]; // Fallback to NGN
+    return new Intl.NumberFormat(curr.locale, {
+      style: "currency",
+      currency: curr.code,
+      minimumFractionDigits: 2,
+    }).format(value || 0);
+  };
+
   const downloadAsImage = async (quotation) => {
     setDownloading(quotation.id);
     try {
@@ -156,7 +164,18 @@ const QuotationsList = () => {
     }
   };
 
-  const generateQuotationHTML = (data) => `
+  const generateQuotationHTML = (data) => {
+    const curr = data.currency || SUPPORTED_CURRENCIES[0];
+
+    // Internal helper to keep the template clean
+    const format = (val) =>
+      new Intl.NumberFormat(curr.locale, {
+        style: "currency",
+        currency: curr.code,
+        minimumFractionDigits: 2,
+      }).format(val || 0);
+
+    return `
     <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid ${data.brandColor}; padding-bottom: 16px;">
         <div style="flex: 1;">
@@ -216,17 +235,13 @@ const QuotationsList = () => {
             <tr style="border-bottom: 1px solid #ddd;">
               <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">${item.description || "-"}</td>
               <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${item.qty || "-"}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${item.unitPrice ? format(item.unitPrice) : "-"}</td>
               <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                ${item.unitPrice ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+                ${item.qty && item.unitPrice ? format(parseFloat(item.qty) * parseFloat(item.unitPrice)) : "-"}
               </td>
-              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                ${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-              </td>
-              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                ${item.discount ? `₦${parseFloat(item.discount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-              </td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${item.discount ? format(item.discount) : "-"}</td>
               <td style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">
-                ${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+                ${item.qty && item.unitPrice ? format(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)) : "-"}
               </td>
             </tr>
           `,
@@ -237,7 +252,7 @@ const QuotationsList = () => {
           <tr style="background-color: #f5f5f5;">
             <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total Estimate:</td>
             <td style="padding: 8px; text-align: right; font-weight: bold; color: ${data.brandColor}; border: 1px solid #ddd;">
-              ₦${parseFloat(data.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${format(data.total)}
             </td>
           </tr>
           ${
@@ -274,8 +289,8 @@ const QuotationsList = () => {
       `
           : ""
       }
-    </div>
-  `;
+    </div>`;
+  };
 
   if (loading) {
     return (
@@ -288,7 +303,6 @@ const QuotationsList = () => {
   return (
     <div className="min-h-screen bg-gray-50 px-2 pt-6 pb-30 text-gray-600">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Quotations</h1>
@@ -304,7 +318,6 @@ const QuotationsList = () => {
           </button>
         </div>
 
-        {/* Search */}
         <div className="bg-white rounded-xl shadow-md p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
@@ -329,7 +342,6 @@ const QuotationsList = () => {
           </div>
         </div>
 
-        {/* Grid */}
         {filteredQuotations.length === 0 ? (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
             <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -364,7 +376,8 @@ const QuotationsList = () => {
                         className="text-lg font-bold"
                         style={{ color: q.brandColor }}
                       >
-                        ₦{parseFloat(q.total).toLocaleString()}
+                        {/* ✅ Dynamic Currency in Grid Card */}
+                        {formatCurrencyValue(q.total, q.currency)}
                       </p>
                     </div>
                   </div>
@@ -415,7 +428,6 @@ const QuotationsList = () => {
           </div>
         )}
 
-        {/* Upgrade Modal */}
         {showLimitModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">

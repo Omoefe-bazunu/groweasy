@@ -12,6 +12,9 @@ import { toast } from "react-toastify";
 import { useUser } from "../context/UserContext";
 import { useSubscription } from "../context/SubscriptionContext";
 import api from "../lib/api";
+// ✅ Import currency selection tools
+import CurrencySelector from "./Currency";
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const COLLECTION_NAME = "inventory";
 
@@ -36,6 +39,8 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
     costPrice: "",
     sellPrice: "",
     quantity: 0,
+    // ✅ Default to Naira
+    currency: SUPPORTED_CURRENCIES[0],
   };
 
   const [newItem, setNewItem] = useState(defaultNewItem);
@@ -49,7 +54,20 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
     }
   }, [user, isPaid, getLimitStatus]);
 
-  // ✅ Same pattern as QuotationCreator / InvoiceCreator
+  const handleCurrencyChange = (currency) => {
+    setNewItem((prev) => ({ ...prev, currency }));
+  };
+
+  // ✅ Updated Formatter for dynamic currency
+  const formatCurrency = (value) => {
+    const activeCurrency = newItem.currency || SUPPORTED_CURRENCIES[0];
+    return new Intl.NumberFormat(activeCurrency.locale, {
+      style: "currency",
+      currency: activeCurrency.code,
+      minimumFractionDigits: 2,
+    }).format(parseFloat(value || 0));
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!user) return toast.error("You must be logged in");
@@ -72,6 +90,8 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
         minLevel: parseInt(newItem.minLevel) || 5,
         costPrice: parseFloat(newItem.costPrice) || 0,
         sellPrice: parseFloat(newItem.sellPrice) || 0,
+        // ✅ Send currency settings to backend
+        currency: newItem.currency,
       });
 
       toast.success("Product created successfully");
@@ -86,6 +106,7 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
         minLevel: parseInt(newItem.minLevel) || 5,
         costPrice: parseFloat(newItem.costPrice) || 0,
         sellPrice: parseFloat(newItem.sellPrice) || 0,
+        currency: newItem.currency,
       };
       onInventoryChange((prev) => [createdProduct, ...prev]);
       setNewItem(defaultNewItem);
@@ -102,7 +123,6 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
     }
   };
 
-  // ✅ Stock adjustment via backend
   const handleAdjustment = async (e) => {
     e.preventDefault();
     if (!selectedItemId || !adjustmentQty) return;
@@ -138,7 +158,7 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-bottom-4 duration-500">
-      {/* ── Stock Adjustment ───────────────────────────────────────── */}
+      {/* ── Stock Adjustment ── */}
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 h-fit">
         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
           <RotateCcw className="w-5 h-5 text-blue-600" /> Stock Adjustment
@@ -224,7 +244,7 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
         </form>
       </div>
 
-      {/* ── Add New Product ────────────────────────────────────────── */}
+      {/* ── Add New Product ── */}
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 border-t-4 border-t-[#8b5cf6]">
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -283,10 +303,18 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-4">
+            {/* ✅ Added Currency Selector */}
+            <CurrencySelector
+              selectedCurrency={newItem.currency || SUPPORTED_CURRENCIES[0]}
+              onCurrencyChange={handleCurrencyChange}
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cost Price (₦)
+                Cost Price ({newItem.currency?.symbol || "₦"})
               </label>
               <input
                 type="number"
@@ -301,7 +329,7 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Selling Price (₦)
+                Selling Price ({newItem.currency?.symbol || "₦"})
               </label>
               <input
                 type="number"
@@ -372,7 +400,6 @@ const InventoryOperations = ({ inventory, onInventoryChange, switchToTab }) => {
         </form>
       </div>
 
-      {/* Upgrade Modal */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">

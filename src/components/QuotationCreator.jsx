@@ -4,6 +4,9 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { toast } from "react-toastify";
 import api from "../lib/api";
 import { RotateCcw, Save, Lock, Loader2, LockIcon } from "lucide-react";
+// ✅ Import Currency selection tools
+import CurrencySelector from "./Currency";
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const COLLECTION_NAME = "quotations";
 
@@ -19,6 +22,7 @@ const QuotationCreator = () => {
     limit: 10,
   });
 
+  // ✅ Default to Naira (Ensure NGN is index 0 in your currencies.js)
   const defaultForm = {
     businessName: "",
     address: "",
@@ -27,6 +31,7 @@ const QuotationCreator = () => {
     date: new Date().toISOString().split("T")[0],
     quotationNumber: "",
     brandColor: "#0ea5e9",
+    currency: SUPPORTED_CURRENCIES[0],
     clientName: "",
     clientContact: "",
     clientLocation: "",
@@ -66,11 +71,21 @@ const QuotationCreator = () => {
     setFormData((prev) => ({ ...prev, items: updatedItems }));
   };
 
-  const formatCurrency = (value) =>
-    parseFloat(value || 0).toLocaleString("en-NG", {
+  const handleCurrencyChange = (currency) => {
+    setFormData((prev) => ({ ...prev, currency }));
+  };
+
+  // ✅ SAFEGUARD: This handles both new data and old data missing the currency field
+  const formatCurrency = (value) => {
+    // If formData.currency is missing (old data), fallback to Naira
+    const activeCurrency = formData.currency || SUPPORTED_CURRENCIES[0];
+
+    return new Intl.NumberFormat(activeCurrency.locale, {
+      style: "currency",
+      currency: activeCurrency.code,
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    }).format(value || 0);
+  };
 
   const calculateAmount = (qty, unitPrice) =>
     (parseFloat(qty) || 0) * (parseFloat(unitPrice) || 0);
@@ -90,7 +105,6 @@ const QuotationCreator = () => {
     if (!formData.businessName || !formData.address)
       return toast.error("Business name and address are required");
 
-    // ✅ Check write permission via backend before submitting
     const allowed = await canWriteTo(COLLECTION_NAME);
     if (!allowed) {
       setShowLimitModal(true);
@@ -110,10 +124,8 @@ const QuotationCreator = () => {
       toast.success("Quotation saved successfully!");
       handleReset();
 
-      // Refresh limit count for free users
       if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
     } catch (err) {
-      // ✅ Backend returns 403 when limit reached
       if (err.response?.status === 403) {
         setShowLimitModal(true);
       } else {
@@ -183,13 +195,11 @@ const QuotationCreator = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* ── Form Side ─────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
             <h2 className="text-xl font-semibold text-gray-900">
               Quotation Details
             </h2>
 
-            {/* Basic Info */}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -219,7 +229,6 @@ const QuotationCreator = () => {
               </div>
             </div>
 
-            {/* Contact */}
             <div className="grid grid-cols-2 gap-4">
               <input
                 type="email"
@@ -239,8 +248,7 @@ const QuotationCreator = () => {
               />
             </div>
 
-            {/* Date & Color */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Date
@@ -253,6 +261,13 @@ const QuotationCreator = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9]"
                 />
               </div>
+              <CurrencySelector
+                selectedCurrency={formData.currency || SUPPORTED_CURRENCIES[0]}
+                onCurrencyChange={handleCurrencyChange}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Brand Color
@@ -267,7 +282,6 @@ const QuotationCreator = () => {
               </div>
             </div>
 
-            {/* Quotation Number */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Quotation Number
@@ -282,7 +296,6 @@ const QuotationCreator = () => {
               />
             </div>
 
-            {/* Client Info */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Client Information
@@ -315,7 +328,6 @@ const QuotationCreator = () => {
               </div>
             </div>
 
-            {/* Line Items */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Line Items
@@ -369,7 +381,6 @@ const QuotationCreator = () => {
               </div>
             </div>
 
-            {/* Validity & Terms */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Terms & Validity
@@ -401,7 +412,6 @@ const QuotationCreator = () => {
               </div>
             </div>
 
-            {/* Bank Details */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Bank Details (Optional)
@@ -432,7 +442,6 @@ const QuotationCreator = () => {
               />
             </div>
 
-            {/* Signatory */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Signatory
@@ -458,7 +467,6 @@ const QuotationCreator = () => {
             </div>
           </div>
 
-          {/* ── Preview Side ───────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Preview
@@ -467,7 +475,6 @@ const QuotationCreator = () => {
               id="quotation-preview"
               className="bg-white p-8 border border-gray-200 rounded-lg"
             >
-              {/* Header */}
               <div
                 className="flex justify-between items-start mb-6 pb-4"
                 style={{ borderBottom: `3px solid ${formData.brandColor}` }}
@@ -511,7 +518,6 @@ const QuotationCreator = () => {
                 </div>
               </div>
 
-              {/* Client Info */}
               {(formData.clientName ||
                 formData.clientContact ||
                 formData.clientLocation) && (
@@ -540,7 +546,6 @@ const QuotationCreator = () => {
                 </div>
               )}
 
-              {/* Items Table */}
               <div className="overflow-x-auto">
                 <table className="min-w-[600px] w-full text-sm">
                   <thead>
@@ -567,22 +572,28 @@ const QuotationCreator = () => {
                         <td className="p-2 text-center">{item.qty || "-"}</td>
                         <td className="p-2 text-right">
                           {item.unitPrice
-                            ? `₦${formatCurrency(item.unitPrice)}`
+                            ? formatCurrency(item.unitPrice)
                             : "-"}
                         </td>
                         <td className="p-2 text-right">
                           {item.qty && item.unitPrice
-                            ? `₦${formatCurrency(calculateAmount(item.qty, item.unitPrice))}`
+                            ? formatCurrency(
+                                calculateAmount(item.qty, item.unitPrice),
+                              )
                             : "-"}
                         </td>
                         <td className="p-2 text-right">
-                          {item.discount
-                            ? `₦${formatCurrency(item.discount)}`
-                            : "-"}
+                          {item.discount ? formatCurrency(item.discount) : "-"}
                         </td>
                         <td className="p-2 text-right font-semibold">
                           {item.qty && item.unitPrice
-                            ? `₦${formatCurrency(calculateFinalAmount(item.qty, item.unitPrice, item.discount))}`
+                            ? formatCurrency(
+                                calculateFinalAmount(
+                                  item.qty,
+                                  item.unitPrice,
+                                  item.discount,
+                                ),
+                              )
                             : "-"}
                         </td>
                       </tr>
@@ -597,7 +608,7 @@ const QuotationCreator = () => {
                         className="p-2 text-right font-bold"
                         style={{ color: formData.brandColor }}
                       >
-                        ₦{formatCurrency(calculateTotal())}
+                        {formatCurrency(calculateTotal())}
                       </td>
                     </tr>
                     {formData.validUntil && (
@@ -617,7 +628,6 @@ const QuotationCreator = () => {
                 </table>
               </div>
 
-              {/* Terms */}
               {formData.termsAndConditions && (
                 <div className="mt-6">
                   <h3 className="text-sm font-semibold text-gray-700 mb-1">
@@ -629,7 +639,6 @@ const QuotationCreator = () => {
                 </div>
               )}
 
-              {/* Bank Details */}
               {(formData.accountName ||
                 formData.accountNumber ||
                 formData.bankName) && (
@@ -658,7 +667,6 @@ const QuotationCreator = () => {
                 </div>
               )}
 
-              {/* Signatory */}
               {formData.signatureName && (
                 <div className="mt-8 pt-6 border-t border-gray-200">
                   <p className="text-sm font-semibold">
@@ -674,7 +682,6 @@ const QuotationCreator = () => {
         </div>
       </div>
 
-      {/* Upgrade Modal */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">

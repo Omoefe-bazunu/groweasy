@@ -15,6 +15,8 @@ import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import api from "../lib/api";
+// ✅ Import supported currencies for fallback logic
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const ReceiptsList = () => {
   const { user } = useUser();
@@ -74,11 +76,17 @@ const ReceiptsList = () => {
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const formatCurrency = (value) =>
-    parseFloat(value || 0).toLocaleString("en-NG", {
+
+  // ✅ Dynamic Currency Formatter with fallback to Naira
+  const formatCurrencyValue = (value, currencyObj) => {
+    const curr = currencyObj || SUPPORTED_CURRENCIES[0];
+    return new Intl.NumberFormat(curr.locale, {
+      style: "currency",
+      currency: curr.code,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    });
+    }).format(parseFloat(value || 0));
+  };
 
   const calculateBalance = (total, amountPaid) =>
     (parseFloat(total) - parseFloat(amountPaid || 0)).toFixed(2);
@@ -120,7 +128,7 @@ const ReceiptsList = () => {
     }
   };
 
-  // ── Download helpers (client-side only, unchanged) ────────────────────────
+  // ── Download helpers ──────────────────────────────────────────────────────
   const downloadAsImage = async (receipt) => {
     setDownloading(receipt.id);
     try {
@@ -183,7 +191,18 @@ const ReceiptsList = () => {
     }
   };
 
-  const generateReceiptHTML = (receipt) => `
+  const generateReceiptHTML = (receipt) => {
+    const curr = receipt.currency || SUPPORTED_CURRENCIES[0];
+    const formatter = new Intl.NumberFormat(curr.locale, {
+      style: "currency",
+      currency: curr.code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    const format = (val) => formatter.format(parseFloat(val || 0));
+
+    return `
     <div style="width:800px;padding:40px;font-family:Arial,sans-serif;background:white;color:black;">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:24px;border-bottom:3px solid ${receipt.brandColor || "#000"};padding-bottom:16px;">
         <div style="flex:1;">
@@ -230,10 +249,10 @@ const ReceiptsList = () => {
             <tr style="border-bottom:1px solid #ddd;">
               <td style="padding:8px;text-align:left;border:1px solid #ddd;">${item.details || "-"}</td>
               <td style="padding:8px;text-align:center;border:1px solid #ddd;">${item.qty || "-"}</td>
-              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.unitPrice ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
-              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
-              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.discount ? `₦${parseFloat(item.discount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
-              <td style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.unitPrice ? format(item.unitPrice) : "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.qty && item.unitPrice ? format(parseFloat(item.qty) * parseFloat(item.unitPrice)) : "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.discount ? format(item.discount) : "-"}</td>
+              <td style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">${item.qty && item.unitPrice ? format(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)) : "-"}</td>
             </tr>`,
             )
             .join("")}
@@ -241,19 +260,19 @@ const ReceiptsList = () => {
         <tfoot>
           <tr style="background-color:#f5f5f5;">
             <td colspan="5" style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">Total:</td>
-            <td style="padding:8px;text-align:right;font-weight:bold;color:${receipt.brandColor || "#000"};border:1px solid #ddd;">₦${parseFloat(receipt.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;color:${receipt.brandColor || "#000"};border:1px solid #ddd;">${format(receipt.total)}</td>
           </tr>
           <tr>
             <td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Amount Paid:</td>
-            <td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">₦${parseFloat(receipt.amountPaid || "0").toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${receipt.paymentMethod ? `<span style="display:block;font-size:12px;color:#666;">(${receipt.paymentMethod})</span>` : ""}</td>
+            <td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">${format(receipt.amountPaid || "0")}${receipt.paymentMethod ? `<span style="display:block;font-size:12px;color:#666;">(${receipt.paymentMethod})</span>` : ""}</td>
           </tr>
           <tr style="background-color:#f5f5f5;">
             <td colspan="5" style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">Balance Outstanding:</td>
-            <td style="padding:8px;text-align:right;font-weight:bold;color:${receipt.brandColor || "#000"};border:1px solid #ddd;">₦${parseFloat(calculateBalance(receipt.total, receipt.amountPaid)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;color:${receipt.brandColor || "#000"};border:1px solid #ddd;">${format(calculateBalance(receipt.total, receipt.amountPaid))}</td>
           </tr>
           ${receipt.dueDate ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Due Date:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">${receipt.dueDate}</td></tr>` : ""}
           ${receipt.interestRate ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Interest Rate:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">${receipt.interestRate}%</td></tr>` : ""}
-          ${receipt.interestRate && calculateInterestCharges(receipt) > 0 ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Interest Charges:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">₦${parseFloat(calculateInterestCharges(receipt)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>` : ""}
+          ${receipt.interestRate && calculateInterestCharges(receipt) > 0 ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Interest Charges:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">${format(calculateInterestCharges(receipt))}</td></tr>` : ""}
         </tfoot>
       </table>
       ${
@@ -266,6 +285,7 @@ const ReceiptsList = () => {
           : ""
       }
     </div>`;
+  };
 
   if (loading) {
     return (
@@ -333,14 +353,6 @@ const ReceiptsList = () => {
                 ? "Try adjusting your search filters"
                 : "Create your first receipt to get started"}
             </p>
-            {!searchText && !searchDate && (
-              <button
-                onClick={() => (window.location.href = "/receipts")}
-                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-[#4238a6] transition-colors"
-              >
-                Create Your First Receipt
-              </button>
-            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -381,47 +393,20 @@ const ReceiptsList = () => {
                         className="text-lg font-bold"
                         style={{ color: receipt.brandColor || "#5247bf" }}
                       >
-                        ₦
-                        {parseFloat(receipt.total).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {/* ✅ Dynamic Formatting for Total */}
+                        {formatCurrencyValue(receipt.total, receipt.currency)}
                       </span>
                     </div>
                     <div className="text-sm">
                       <span className="text-gray-600">Balance: </span>
                       <span className="font-semibold">
-                        ₦
-                        {parseFloat(
+                        {/* ✅ Dynamic Formatting for Balance */}
+                        {formatCurrencyValue(
                           calculateBalance(receipt.total, receipt.amountPaid),
-                        ).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                          receipt.currency,
+                        )}
                       </span>
                     </div>
-                    {receipt.paymentMethod && (
-                      <div className="text-sm">
-                        <span className="text-gray-600">Payment: </span>
-                        <span className="font-semibold">
-                          {receipt.paymentMethod}
-                        </span>
-                      </div>
-                    )}
-                    {receipt.dueDate && (
-                      <div className="text-sm">
-                        <span className="text-gray-600">Due Date: </span>
-                        <span className="font-semibold">{receipt.dueDate}</span>
-                      </div>
-                    )}
-                    {receipt.interestRate && (
-                      <div className="text-sm">
-                        <span className="text-gray-600">Interest: </span>
-                        <span className="font-semibold">
-                          {receipt.interestRate}%
-                        </span>
-                      </div>
-                    )}
                     {receipt.interestRate &&
                       calculateInterestCharges(receipt) > 0 && (
                         <div className="text-sm">
@@ -429,60 +414,39 @@ const ReceiptsList = () => {
                             Interest Charges:{" "}
                           </span>
                           <span className="font-semibold">
-                            ₦{formatCurrency(calculateInterestCharges(receipt))}
+                            {/* ✅ Dynamic Formatting for Interest */}
+                            {formatCurrencyValue(
+                              calculateInterestCharges(receipt),
+                              receipt.currency,
+                            )}
                           </span>
                         </div>
                       )}
-                    {receipt.signatureName && (
-                      <div className="text-sm">
-                        <span className="text-gray-600">Signed by: </span>
-                        <span className="font-semibold">
-                          {receipt.signatureName}
-                        </span>
-                        {receipt.signatoryPosition && (
-                          <span className="text-gray-500">
-                            {" "}
-                            ({receipt.signatoryPosition})
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   <div className="pt-4 border-t border-gray-200 flex gap-2">
                     <button
                       onClick={() => downloadAsImage(receipt)}
-                      disabled={
-                        downloading === receipt.id || deleting === receipt.id
-                      }
+                      disabled={downloading === receipt.id}
                       className="flex-1 flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
-                      <Download className="w-4 h-4" />
-                      {downloading === receipt.id ? "..." : "Image"}
+                      <Download className="w-4 h-4" /> Image
                     </button>
                     <button
                       onClick={() => downloadAsPDF(receipt)}
-                      disabled={
-                        downloading === receipt.id || deleting === receipt.id
-                      }
+                      disabled={downloading === receipt.id}
                       className="flex-1 flex items-center justify-center gap-1 bg-[#5247bf] hover:bg-[#4238a6] text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
-                      <Download className="w-4 h-4" />
-                      {downloading === receipt.id ? "..." : "PDF"}
+                      <Download className="w-4 h-4" /> PDF
                     </button>
                     <button
                       onClick={() => deleteReceipt(receipt.id)}
-                      disabled={
-                        !isPaid ||
-                        downloading === receipt.id ||
-                        deleting === receipt.id
-                      }
+                      disabled={!isPaid || deleting === receipt.id}
                       className={`flex items-center justify-center gap-1 text-sm font-medium py-2 px-3 rounded transition-colors ${
                         !isPaid
                           ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                           : "bg-red-100 hover:bg-red-200 text-red-700"
                       } disabled:opacity-70`}
-                      title={!isPaid ? "Upgrade to delete" : "Delete"}
                     >
                       {deleting === receipt.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -499,13 +463,6 @@ const ReceiptsList = () => {
           </div>
         )}
 
-        {filteredReceipts.length > 0 && (
-          <div className="mt-6 text-center text-gray-600">
-            Showing {filteredReceipts.length} of {receipts.length} receipt(s)
-          </div>
-        )}
-
-        {/* Upgrade Modal */}
         {showLimitModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">

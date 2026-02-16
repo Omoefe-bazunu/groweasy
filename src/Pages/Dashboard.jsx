@@ -1,9 +1,6 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
 import {
   FileText,
   User,
@@ -20,32 +17,13 @@ const Dashboard = () => {
   const { isPaid, subscription, daysRemaining, planLabel, planType } =
     useSubscription();
 
-  const [profileExists, setProfileExists] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const checkProfile = async () => {
-      if (!user) return;
-      try {
-        const profileRef = doc(db, "profiles", user.uid);
-        const profileSnap = await getDoc(profileRef);
-        setProfileExists(profileSnap.exists());
-      } catch (error) {
-        console.error("Error checking business profile:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkProfile();
-  }, [user]);
-
   const handleCreations = () => navigate("/content-creation-board");
-  const handleBusinessProfile = () => navigate("/profile");
+  const handleUserProfile = () => navigate("/user-profile");
   const handleViewDocuments = () => navigate("/documents");
   const handleUpgrade = () => navigate("/subscribe");
   const handleReferrals = () => navigate("/referrals");
 
-  if (loading || !userData) {
+  if (!userData) {
     return (
       <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
         <div className="flex space-x-2">
@@ -91,7 +69,6 @@ const Dashboard = () => {
                       {isPaid ? "Pro Plan Active" : planLabel}
                     </h2>
                     {isPaid && (
-                      // ✅ Uses planType (from backend) not subscription?.type
                       <p className="text-sm text-gray-600 capitalize">
                         {planType} • {daysRemaining} days remaining
                       </p>
@@ -193,30 +170,22 @@ const Dashboard = () => {
             </button>
           </div>
 
-          {/* Business Profile */}
+          {/* User Profile */}
           <div
-            onClick={handleBusinessProfile}
+            onClick={handleUserProfile}
             className="bg-white/95 rounded-2xl shadow-lg p-6 flex flex-col items-start justify-between hover:border-[#5247bf] border-2 border-transparent transition-all duration-300 cursor-pointer group"
           >
             <div className="mb-6">
               <div className="bg-blue-100 w-14 h-14 rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#5247bf] transition-colors">
                 <User className="w-8 h-8 text-[#5247bf] group-hover:text-white" />
               </div>
-              <h2 className="text-xl font-bold text-gray-800">
-                Business Profile
-              </h2>
-              {profileExists ? (
-                <p className="text-sm text-green-600 font-medium mt-1">
-                  ✓ Profile Live & Active
-                </p>
-              ) : (
-                <p className="text-sm text-gray-500 mt-1">
-                  Setup your professional business information.
-                </p>
-              )}
+              <h2 className="text-xl font-bold text-gray-800">User Profile</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Manage your account settings and preferences.
+              </p>
             </div>
             <button className="w-full bg-gray-100 text-[#5247bf] font-bold py-3 rounded-xl group-hover:bg-[#5247bf] group-hover:text-white transition-all">
-              {profileExists ? "View Profile" : "Create Profile"}
+              View Profile
             </button>
           </div>
 

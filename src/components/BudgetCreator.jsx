@@ -14,6 +14,9 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
+// ✅ Import Currency selection tools
+import CurrencySelector from "./Currency";
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const COLLECTION_NAME = "budgets";
 
@@ -34,6 +37,8 @@ const defaultForm = {
   startDate: "",
   endDate: "",
   status: "Active",
+  // ✅ Default to Naira
+  currency: SUPPORTED_CURRENCIES[0],
   items: [emptyItem()],
 };
 
@@ -65,6 +70,8 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
         startDate: editingBudget.startDate || "",
         endDate: editingBudget.endDate || "",
         status: editingBudget.status || "Active",
+        // ✅ Load stored currency or fallback
+        currency: editingBudget.currency || SUPPORTED_CURRENCIES[0],
         items:
           editingBudget.items?.length > 0 ? editingBudget.items : [emptyItem()],
       });
@@ -82,6 +89,11 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
     const updated = [...formData.items];
     updated[index] = { ...updated[index], [field]: value };
     setFormData((prev) => ({ ...prev, items: updated }));
+  };
+
+  // ✅ Currency Change Handler
+  const handleCurrencyChange = (currency) => {
+    setFormData((prev) => ({ ...prev, currency }));
   };
 
   const addItem = () => {
@@ -111,11 +123,15 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
     .filter((i) => i.type === "expense")
     .reduce((sum, i) => sum + (parseFloat(i.allocated) || 0), 0);
 
-  const formatCurrency = (val) =>
-    parseFloat(val || 0).toLocaleString("en-NG", {
+  // ✅ Dynamic Currency Formatter
+  const formatCurrencyValue = (val) => {
+    const curr = formData.currency || SUPPORTED_CURRENCIES[0];
+    return new Intl.NumberFormat(curr.locale, {
+      style: "currency",
+      currency: curr.code,
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    }).format(parseFloat(val || 0));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -154,6 +170,8 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
         startDate: formData.startDate,
         endDate: formData.endDate,
         status: formData.status,
+        // ✅ Include currency in payload
+        currency: formData.currency,
         items: validItems,
       };
 
@@ -195,7 +213,7 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* ── Budget Meta ─────────────────────────────────────── */}
+        {/* ── Budget Meta ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -230,6 +248,12 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
             </select>
           </div>
 
+          {/* ✅ Currency Selector Integrated Here */}
+          <CurrencySelector
+            selectedCurrency={formData.currency || SUPPORTED_CURRENCIES[0]}
+            onCurrencyChange={handleCurrencyChange}
+          />
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Status
@@ -262,7 +286,7 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
             />
           </div>
 
-          <div>
+          <div className="md:col-span-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               End Date *
             </label>
@@ -277,7 +301,7 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
           </div>
         </div>
 
-        {/* ── Budget Items ─────────────────────────────────────── */}
+        {/* ── Budget Items ── */}
         <div>
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-lg font-semibold text-gray-900">
@@ -298,8 +322,12 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
             <div className="hidden md:grid md:grid-cols-12 gap-2 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
               <div className="col-span-3">Category</div>
               <div className="col-span-2">Type</div>
-              <div className="col-span-2">Allocated (₦)</div>
-              <div className="col-span-2">Actual (₦)</div>
+              <div className="col-span-2">
+                Allocated ({formData.currency?.symbol || "₦"})
+              </div>
+              <div className="col-span-2">
+                Actual ({formData.currency?.symbol || "₦"})
+              </div>
               <div className="col-span-2">Notes</div>
               <div className="col-span-1"></div>
             </div>
@@ -389,45 +417,47 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
           </div>
         </div>
 
-        {/* ── Totals Summary ───────────────────────────────────── */}
+        {/* ── Totals Summary ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-gradient-to-r from-[#5247bf]/10 to-[#4238a6]/10 rounded-lg border border-[#5247bf]/20">
           <div>
-            <p className="text-xs text-gray-500 mb-1">Total Allocated</p>
+            <p className="text-xs text-gray-500 mb-1 font-bold">
+              Total Allocated
+            </p>
             <p className="font-bold text-gray-900">
-              ₦{formatCurrency(totalAllocated)}
+              {formatCurrencyValue(totalAllocated)}
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-1">Total Actual</p>
+            <p className="text-xs text-gray-500 mb-1 font-bold">Total Actual</p>
             <p
               className={`font-bold ${
                 totalActual > totalAllocated ? "text-red-600" : "text-gray-900"
               }`}
             >
-              ₦{formatCurrency(totalActual)}
+              {formatCurrencyValue(totalActual)}
             </p>
           </div>
           <div className="flex items-start gap-1">
             <TrendingUp className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs text-gray-500 mb-1">Income</p>
+              <p className="text-xs text-gray-500 mb-1 font-bold">Income</p>
               <p className="font-bold text-green-600">
-                ₦{formatCurrency(totalIncome)}
+                {formatCurrencyValue(totalIncome)}
               </p>
             </div>
           </div>
           <div className="flex items-start gap-1">
             <TrendingDown className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
             <div>
-              <p className="text-xs text-gray-500 mb-1">Expenses</p>
+              <p className="text-xs text-gray-500 mb-1 font-bold">Expenses</p>
               <p className="font-bold text-red-500">
-                ₦{formatCurrency(totalExpense)}
+                {formatCurrencyValue(totalExpense)}
               </p>
             </div>
           </div>
         </div>
 
-        {/* ── Actions ─────────────────────────────────────────── */}
+        {/* ── Actions ── */}
         <div className="flex gap-3 pt-2">
           {onCancel && (
             <button
@@ -443,7 +473,7 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
             disabled={
               loading || (limitStatus.reached && !isPaid && !editingBudget)
             }
-            className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-bold transition-colors ${
               limitStatus.reached && !isPaid && !editingBudget
                 ? "bg-gray-400 cursor-not-allowed text-white"
                 : "bg-[#5247bf] hover:bg-[#4238a6] text-white"
@@ -477,19 +507,19 @@ const BudgetCreator = ({ editingBudget = null, onSaved, onCancel }) => {
             <h3 className="text-2xl font-bold text-gray-900 mb-3">
               Free Limit Reached
             </h3>
-            <p className="text-gray-600 mb-8">
+            <p className="text-gray-600 mb-8 font-medium">
               You've used all <strong>{limitStatus.limit}</strong> free budgets.
               Upgrade to Pro for unlimited budgets and full management.
             </p>
             <button
               onClick={() => (window.location.href = "/subscribe")}
-              className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-semibold hover:bg-[#4238a6] transition"
+              className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-bold hover:bg-[#4238a6] transition"
             >
               Subscribe Now
             </button>
             <button
               onClick={() => setShowLimitModal(false)}
-              className="w-full mt-3 text-gray-600 hover:text-gray-800"
+              className="w-full mt-3 text-gray-600 font-bold"
             >
               Maybe later
             </button>

@@ -20,9 +20,9 @@ import Dashboard from "./Pages/Dashboard";
 import ReferralDashboard from "./Pages/ReferralDashboard";
 import ContentCreationBoard from "./Pages/ContentCreationBoard";
 import UserProfile from "./Pages/UserProfile";
-import Profile from "./Pages/Profile";
+// import Profile from "./Pages/Profile";
 import Documents from "./Pages/Documents";
-import PublicProfile from "./Pages/PublicProfile";
+// import PublicProfile from "./Pages/PublicProfile";
 
 // Business Tools
 import FinancialRecords from "./Pages/BusinessTools/FinancialRecords";
@@ -90,9 +90,9 @@ const App = () => {
             element={<ContentCreationBoard />}
           />
           <Route path="/user-profile" element={<UserProfile />} />
-          <Route path="/profile" element={<Profile />} />
+          {/* <Route path="/profile" element={<Profile />} /> */}
           <Route path="/documents" element={<Documents />} />
-          <Route path="/public-profile/:userId" element={<PublicProfile />} />
+          {/* <Route path="/public-profile/:userId" element={<PublicProfile />} /> */}
 
           {/* Business Tools */}
           <Route path="/financial-records" element={<FinancialRecords />} />

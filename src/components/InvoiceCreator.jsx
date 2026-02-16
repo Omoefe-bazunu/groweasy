@@ -4,6 +4,9 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { toast } from "react-toastify";
 import api from "../lib/api";
 import { RotateCcw, Save, Lock, Loader2, LockIcon } from "lucide-react";
+// ✅ Correct Import as per your instruction
+import CurrencySelector from "./Currency";
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const COLLECTION_NAME = "invoices";
 
@@ -27,6 +30,8 @@ const InvoiceCreator = () => {
     date: new Date().toISOString().split("T")[0],
     invoiceNumber: "",
     brandColor: "#5247bf",
+    // ✅ Initialize with Default Currency (Naira)
+    currency: SUPPORTED_CURRENCIES[0],
     clientName: "",
     clientContact: "",
     clientLocation: "",
@@ -64,11 +69,21 @@ const InvoiceCreator = () => {
     setFormData((prev) => ({ ...prev, items: updatedItems }));
   };
 
-  const formatCurrency = (value) =>
-    parseFloat(value || 0).toLocaleString("en-NG", {
+  // ✅ Currency Change Handler
+  const handleCurrencyChange = (currency) => {
+    setFormData((prev) => ({ ...prev, currency }));
+  };
+
+  // ✅ Updated Dynamic Currency Formatter for Invoices
+  const formatCurrency = (value) => {
+    const activeCurrency = formData.currency || SUPPORTED_CURRENCIES[0];
+    return new Intl.NumberFormat(activeCurrency.locale, {
+      style: "currency",
+      currency: activeCurrency.code,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    });
+    }).format(parseFloat(value || 0));
+  };
 
   const calculateAmount = (qty, unitPrice) =>
     (parseFloat(qty) || 0) * (parseFloat(unitPrice) || 0);
@@ -176,68 +191,61 @@ const InvoiceCreator = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* ── Form ─────────────────────────────────────────────────── */}
+          {/* ── Form Side ── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
             <h2 className="text-xl font-semibold text-gray-900">
               Invoice Details
             </h2>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Business Name *
-              </label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Business Name *
+                </label>
+                <input
+                  type="text"
+                  name="businessName"
+                  value={formData.businessName}
+                  onChange={handleInputChange}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address *
+                </label>
+                <textarea
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+                  rows={2}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <input
-                type="text"
-                name="businessName"
-                value={formData.businessName}
+                type="email"
+                name="contactEmail"
+                placeholder="Contact Email"
+                value={formData.contactEmail}
                 onChange={handleInputChange}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                required
+              />
+              <input
+                type="tel"
+                name="contactNumber"
+                placeholder="Contact Number"
+                value={formData.contactNumber}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Address *
-              </label>
-              <textarea
-                name="address"
-                value={formData.address}
-                onChange={handleInputChange}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                rows={2}
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contact Email
-                </label>
-                <input
-                  type="email"
-                  name="contactEmail"
-                  value={formData.contactEmail}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contact Number
-                </label>
-                <input
-                  type="tel"
-                  name="contactNumber"
-                  value={formData.contactNumber}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Invoice Date
@@ -250,18 +258,24 @@ const InvoiceCreator = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Brand Color
-                </label>
-                <input
-                  type="color"
-                  name="brandColor"
-                  value={formData.brandColor}
-                  onChange={handleInputChange}
-                  className="w-full h-12 border border-gray-300 rounded-lg cursor-pointer"
-                />
-              </div>
+              {/* ✅ Currency Selector Integrated Here */}
+              <CurrencySelector
+                selectedCurrency={formData.currency || SUPPORTED_CURRENCIES[0]}
+                onCurrencyChange={handleCurrencyChange}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Brand Color
+              </label>
+              <input
+                type="color"
+                name="brandColor"
+                value={formData.brandColor}
+                onChange={handleInputChange}
+                className="w-full h-12 border border-gray-300 rounded-lg cursor-pointer"
+              />
             </div>
 
             <div>
@@ -278,50 +292,46 @@ const InvoiceCreator = () => {
               />
             </div>
 
-            {/* Client Info */}
-            <div className="pt-4 border-t">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            <div className="pt-4 border-t space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">
                 Client Information
               </h3>
-              <div className="space-y-4">
+              <input
+                type="text"
+                name="clientName"
+                placeholder="Client Name"
+                value={formData.clientName}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+              />
+              <div className="grid grid-cols-2 gap-4">
                 <input
-                  type="text"
-                  name="clientName"
-                  placeholder="Client/Customer Name"
-                  value={formData.clientName}
+                  type="tel"
+                  name="clientContact"
+                  placeholder="Phone"
+                  value={formData.clientContact}
                   onChange={handleInputChange}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
                 />
-                <div className="grid grid-cols-2 gap-4">
-                  <input
-                    type="tel"
-                    name="clientContact"
-                    placeholder="Contact Number"
-                    value={formData.clientContact}
-                    onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                  />
-                  <input
-                    type="text"
-                    name="clientLocation"
-                    placeholder="Location"
-                    value={formData.clientLocation}
-                    onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                  />
-                </div>
                 <input
                   type="text"
-                  name="clientOccupation"
-                  placeholder="Occupation (Optional)"
-                  value={formData.clientOccupation}
+                  name="clientLocation"
+                  placeholder="Location"
+                  value={formData.clientLocation}
                   onChange={handleInputChange}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
                 />
               </div>
+              <input
+                type="text"
+                name="clientOccupation"
+                placeholder="Occupation (Optional)"
+                value={formData.clientOccupation}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+              />
             </div>
 
-            {/* Line Items */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Line Items
@@ -375,7 +385,6 @@ const InvoiceCreator = () => {
               </div>
             </div>
 
-            {/* Payment Terms */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Payment Terms (Optional)
@@ -394,7 +403,6 @@ const InvoiceCreator = () => {
               </div>
             </div>
 
-            {/* Bank Details */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Bank Details (Optional)
@@ -425,7 +433,6 @@ const InvoiceCreator = () => {
               />
             </div>
 
-            {/* Signatory */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Signatory
@@ -451,7 +458,7 @@ const InvoiceCreator = () => {
             </div>
           </div>
 
-          {/* ── Preview ───────────────────────────────────────────────── */}
+          {/* ── Preview Side ── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Preview
@@ -564,22 +571,28 @@ const InvoiceCreator = () => {
                         <td className="p-2 text-center">{item.qty || "-"}</td>
                         <td className="p-2 text-right">
                           {item.unitPrice
-                            ? `₦${formatCurrency(item.unitPrice)}`
+                            ? formatCurrency(item.unitPrice)
                             : "-"}
                         </td>
                         <td className="p-2 text-right">
                           {item.qty && item.unitPrice
-                            ? `₦${formatCurrency(calculateAmount(item.qty, item.unitPrice))}`
+                            ? formatCurrency(
+                                calculateAmount(item.qty, item.unitPrice),
+                              )
                             : "-"}
                         </td>
                         <td className="p-2 text-right">
-                          {item.discount
-                            ? `₦${formatCurrency(item.discount)}`
-                            : "-"}
+                          {item.discount ? formatCurrency(item.discount) : "-"}
                         </td>
                         <td className="p-2 text-right font-semibold">
                           {item.qty && item.unitPrice
-                            ? `₦${formatCurrency(calculateFinalAmount(item.qty, item.unitPrice, item.discount))}`
+                            ? formatCurrency(
+                                calculateFinalAmount(
+                                  item.qty,
+                                  item.unitPrice,
+                                  item.discount,
+                                ),
+                              )
                             : "-"}
                         </td>
                       </tr>
@@ -594,7 +607,7 @@ const InvoiceCreator = () => {
                         className="p-2 text-right font-bold"
                         style={{ color: formData.brandColor }}
                       >
-                        ₦{formatCurrency(calculateTotal())}
+                        {formatCurrency(calculateTotal())}
                       </td>
                     </tr>
                     {formData.dueDate && (

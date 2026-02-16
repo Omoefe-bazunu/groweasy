@@ -4,6 +4,9 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { toast } from "react-toastify";
 import api from "../lib/api";
 import { RotateCcw, Save, Lock, Loader2, Plus } from "lucide-react";
+// ✅ Import Currency selection tools
+import CurrencySelector from "./Currency";
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const COLLECTION_NAME = "payrolls";
 
@@ -25,6 +28,8 @@ const PayrollCreator = () => {
     payPeriod: new Date().toISOString().slice(0, 7),
     paymentDate: new Date().toISOString().split("T")[0],
     brandColor: "#10b981",
+    // ✅ Initialize with Default Currency (Naira)
+    currency: SUPPORTED_CURRENCIES[0],
     employeeName: "",
     employeeRole: "",
     employeeId: "",
@@ -54,6 +59,11 @@ const PayrollCreator = () => {
     setFormData((prev) => ({ ...prev, [type]: updated }));
   };
 
+  // ✅ Currency Change Handler
+  const handleCurrencyChange = (currency) => {
+    setFormData((prev) => ({ ...prev, currency }));
+  };
+
   const addField = (type) =>
     setFormData((prev) => ({
       ...prev,
@@ -66,11 +76,16 @@ const PayrollCreator = () => {
       [type]: prev[type].filter((_, i) => i !== index),
     }));
 
-  const formatCurrency = (value) =>
-    parseFloat(value || 0).toLocaleString("en-NG", {
+  // ✅ Dynamic Currency Formatter for Payroll
+  const formatCurrency = (value) => {
+    const activeCurrency = formData.currency || SUPPORTED_CURRENCIES[0];
+    return new Intl.NumberFormat(activeCurrency.locale, {
+      style: "currency",
+      currency: activeCurrency.code,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    });
+    }).format(parseFloat(value || 0));
+  };
 
   const calculateTotal = (items) =>
     items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
@@ -122,7 +137,6 @@ const PayrollCreator = () => {
   return (
     <div className="min-h-screen w-full bg-gray-50 px-2 py-6 text-gray-600">
       <div className="w-full mx-auto max-w-7xl">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
@@ -168,9 +182,8 @@ const PayrollCreator = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* ── Form ─────────────────────────────────────────────────── */}
+          {/* ── Form Side ── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
-            {/* Company Info */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                 Company Information
@@ -191,7 +204,7 @@ const PayrollCreator = () => {
                 className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#10b981]"
                 rows={2}
               />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input
                   type="month"
                   name="payPeriod"
@@ -199,6 +212,15 @@ const PayrollCreator = () => {
                   onChange={handleInputChange}
                   className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#10b981]"
                 />
+                {/* ✅ Integrated CurrencySelector */}
+                <CurrencySelector
+                  selectedCurrency={
+                    formData.currency || SUPPORTED_CURRENCIES[0]
+                  }
+                  onCurrencyChange={handleCurrencyChange}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <input
                   type="date"
                   name="paymentDate"
@@ -206,22 +228,21 @@ const PayrollCreator = () => {
                   onChange={handleInputChange}
                   className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#10b981]"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Brand Color
-                </label>
-                <input
-                  type="color"
-                  name="brandColor"
-                  value={formData.brandColor}
-                  onChange={handleInputChange}
-                  className="w-full h-12 border rounded-lg cursor-pointer"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Brand Color
+                  </label>
+                  <input
+                    type="color"
+                    name="brandColor"
+                    value={formData.brandColor}
+                    onChange={handleInputChange}
+                    className="w-full h-12 border rounded-lg cursor-pointer"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Employee Info */}
             <div className="space-y-4 pt-4">
               <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                 Employee Details
@@ -272,12 +293,10 @@ const PayrollCreator = () => {
               </div>
             </div>
 
-            {/* Salary */}
             <div className="space-y-4 pt-4">
               <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                 Salary & Deductions
               </h3>
-
               <div>
                 <label className="text-sm font-medium text-gray-700">
                   Basic Salary
@@ -292,7 +311,6 @@ const PayrollCreator = () => {
                 />
               </div>
 
-              {/* Earnings */}
               <div className="bg-green-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-semibold text-green-800">
@@ -347,7 +365,6 @@ const PayrollCreator = () => {
                 ))}
               </div>
 
-              {/* Deductions */}
               <div className="bg-red-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-semibold text-red-800">
@@ -404,7 +421,7 @@ const PayrollCreator = () => {
             </div>
           </div>
 
-          {/* ── Preview ───────────────────────────────────────────────── */}
+          {/* ── Preview Side ── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Payslip Preview
@@ -478,18 +495,19 @@ const PayrollCreator = () => {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span>Basic Salary</span>
-                        <span>₦{formatCurrency(formData.basicSalary)}</span>
+                        {/* ✅ Dynamic Currency Logic */}
+                        <span>{formatCurrency(formData.basicSalary)}</span>
                       </div>
                       {formData.earnings.map((e, i) => (
                         <div key={i} className="flex justify-between">
                           <span>{e.description || "-"}</span>
-                          <span>₦{formatCurrency(e.amount)}</span>
+                          <span>{formatCurrency(e.amount)}</span>
                         </div>
                       ))}
                       <div className="flex justify-between font-bold pt-2 border-t mt-2">
                         <span>Total Earnings</span>
                         <span className="text-green-600">
-                          ₦{formatCurrency(totalEarnings)}
+                          {formatCurrency(totalEarnings)}
                         </span>
                       </div>
                     </div>
@@ -502,13 +520,13 @@ const PayrollCreator = () => {
                       {formData.deductions.map((d, i) => (
                         <div key={i} className="flex justify-between">
                           <span>{d.description || "-"}</span>
-                          <span>₦{formatCurrency(d.amount)}</span>
+                          <span>{formatCurrency(d.amount)}</span>
                         </div>
                       ))}
                       <div className="flex justify-between font-bold pt-2 border-t mt-2">
                         <span>Total Deductions</span>
                         <span className="text-red-600">
-                          ₦{formatCurrency(totalDeductions)}
+                          {formatCurrency(totalDeductions)}
                         </span>
                       </div>
                     </div>
@@ -522,7 +540,7 @@ const PayrollCreator = () => {
                   className="text-2xl font-bold"
                   style={{ color: formData.brandColor }}
                 >
-                  ₦{formatCurrency(netPay)}
+                  {formatCurrency(netPay)}
                 </p>
               </div>
             </div>
@@ -530,7 +548,6 @@ const PayrollCreator = () => {
         </div>
       </div>
 
-      {/* Upgrade Modal */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-8 text-center max-w-md">

@@ -37,12 +37,7 @@ const TopNav = () => {
             >
               Knowledge Base
             </Link>
-            <Link
-              to="/user-profile"
-              className="text-gray-600 hover:text-[#5247bf] font-medium"
-            >
-              Profile
-            </Link>
+
             <Link
               to="/about"
               className="text-gray-600 hover:text-[#5247bf] font-medium"

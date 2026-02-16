@@ -4,6 +4,9 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { toast } from "react-toastify";
 import api from "../lib/api";
 import { RotateCcw, Save, Lock, Loader2, LockIcon } from "lucide-react";
+// ✅ Import Currency selection tools
+import CurrencySelector from "./Currency";
+import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const COLLECTION_NAME = "receipts";
 
@@ -26,6 +29,8 @@ const ReceiptCreator = () => {
     contactNumber: "",
     date: new Date().toISOString().split("T")[0],
     brandColor: "#5247bf",
+    // ✅ Initialize with Default Currency (Naira)
+    currency: SUPPORTED_CURRENCIES[0],
     clientName: "",
     clientContact: "",
     clientLocation: "",
@@ -63,11 +68,21 @@ const ReceiptCreator = () => {
     setFormData((prev) => ({ ...prev, items: updatedItems }));
   };
 
-  const formatCurrency = (value) =>
-    parseFloat(value || 0).toLocaleString("en-NG", {
+  // ✅ Currency Change Handler
+  const handleCurrencyChange = (currency) => {
+    setFormData((prev) => ({ ...prev, currency }));
+  };
+
+  // ✅ Updated Dynamic Currency Formatter
+  const formatCurrency = (value) => {
+    const activeCurrency = formData.currency || SUPPORTED_CURRENCIES[0];
+    return new Intl.NumberFormat(activeCurrency.locale, {
+      style: "currency",
+      currency: activeCurrency.code,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    });
+    }).format(parseFloat(value || 0));
+  };
 
   const calculateAmount = (qty, unitPrice) =>
     (parseFloat(qty) || 0) * (parseFloat(unitPrice) || 0);
@@ -185,7 +200,7 @@ const ReceiptCreator = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* ── Form ─────────────────────────────────────────────────── */}
+          {/* ── Form ── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
             <h2 className="text-xl font-semibold text-gray-900">
               Receipt Details
@@ -259,18 +274,24 @@ const ReceiptCreator = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Brand Color
-                </label>
-                <input
-                  type="color"
-                  name="brandColor"
-                  value={formData.brandColor}
-                  onChange={handleInputChange}
-                  className="w-full h-12 border border-gray-300 rounded-lg cursor-pointer"
-                />
-              </div>
+              {/* ✅ Currency Selector correctly imported as CurrencySelector */}
+              <CurrencySelector
+                selectedCurrency={formData.currency || SUPPORTED_CURRENCIES[0]}
+                onCurrencyChange={handleCurrencyChange}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Brand Color
+              </label>
+              <input
+                type="color"
+                name="brandColor"
+                value={formData.brandColor}
+                onChange={handleInputChange}
+                className="w-full h-12 border border-gray-300 rounded-lg cursor-pointer"
+              />
             </div>
 
             {/* Client Info */}
@@ -447,7 +468,7 @@ const ReceiptCreator = () => {
             </div>
           </div>
 
-          {/* ── Preview ───────────────────────────────────────────────── */}
+          {/* ── Preview ── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Preview
@@ -555,22 +576,28 @@ const ReceiptCreator = () => {
                         <td className="p-2 text-center">{item.qty || "-"}</td>
                         <td className="p-2 text-right">
                           {item.unitPrice
-                            ? `₦${formatCurrency(item.unitPrice)}`
+                            ? formatCurrency(item.unitPrice)
                             : "-"}
                         </td>
                         <td className="p-2 text-right">
                           {item.qty && item.unitPrice
-                            ? `₦${formatCurrency(calculateAmount(item.qty, item.unitPrice))}`
+                            ? formatCurrency(
+                                calculateAmount(item.qty, item.unitPrice),
+                              )
                             : "-"}
                         </td>
                         <td className="p-2 text-right">
-                          {item.discount
-                            ? `₦${formatCurrency(item.discount)}`
-                            : "-"}
+                          {item.discount ? formatCurrency(item.discount) : "-"}
                         </td>
                         <td className="p-2 text-right font-semibold">
                           {item.qty && item.unitPrice
-                            ? `₦${formatCurrency(calculateFinalAmount(item.qty, item.unitPrice, item.discount))}`
+                            ? formatCurrency(
+                                calculateFinalAmount(
+                                  item.qty,
+                                  item.unitPrice,
+                                  item.discount,
+                                ),
+                              )
                             : "-"}
                         </td>
                       </tr>
@@ -585,7 +612,7 @@ const ReceiptCreator = () => {
                         className="p-2 text-right font-bold"
                         style={{ color: formData.brandColor }}
                       >
-                        ₦{formatCurrency(calculateTotal())}
+                        {formatCurrency(calculateTotal())}
                       </td>
                     </tr>
                     <tr>
@@ -594,7 +621,7 @@ const ReceiptCreator = () => {
                       </td>
                       <td className="p-2 text-right font-bold">
                         {formData.amountPaid
-                          ? `₦${formatCurrency(formData.amountPaid)}`
+                          ? formatCurrency(formData.amountPaid)
                           : "-"}
                         {formData.paymentMethod && formData.amountPaid && (
                           <span className="text-xs text-gray-600 block">
@@ -608,7 +635,7 @@ const ReceiptCreator = () => {
                         Outstanding Balance:
                       </td>
                       <td className="p-2 text-right font-bold">
-                        ₦{formatCurrency(calculateOutstandingBalance())}
+                        {formatCurrency(calculateOutstandingBalance())}
                       </td>
                     </tr>
                     {formData.dueDate && (
@@ -638,7 +665,7 @@ const ReceiptCreator = () => {
                             Interest Charges:
                           </td>
                           <td className="p-2 text-right font-bold">
-                            ₦{formatCurrency(calculateInterestCharges())}
+                            {formatCurrency(calculateInterestCharges())}
                           </td>
                         </tr>
                       )}
