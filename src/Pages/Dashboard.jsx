@@ -11,14 +11,14 @@ import {
   CheckCircle,
   Lock,
   Share2,
-  Wallet,
   ArrowRight,
 } from "lucide-react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, userData } = useUser();
-  const { isPaid, subscription, daysRemaining } = useSubscription();
+  const { isPaid, subscription, daysRemaining, planLabel, planType } =
+    useSubscription();
 
   const [profileExists, setProfileExists] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -63,16 +63,16 @@ const Dashboard = () => {
       style={{ backgroundImage: `url('/gebg.jpg')` }}
     >
       {/* Header Banner */}
-      <div className="bg-[#5247bf] rounded-2xl p-6 mb-10 max-w-6xl mx-auto shadow-2xl transform transition-all">
+      <div className="bg-[#5247bf] rounded-2xl p-6 mb-10 max-w-6xl mx-auto shadow-2xl">
         <h1 className="text-3xl md:text-4xl font-extrabold text-white text-center">
           Dashboard
         </h1>
       </div>
 
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* Top Section: Subscription & Partner Program (Side-by-side on Desktop) */}
+        {/* Top Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Subscription Status Card */}
+          {/* ── Subscription Status Card ─────────────────────────────── */}
           <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-[#5247bf]/10 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-6">
@@ -88,15 +88,17 @@ const Dashboard = () => {
                   )}
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">
-                      {isPaid ? "Pro Plan Active" : "Free Plan"}
+                      {isPaid ? "Pro Plan Active" : planLabel}
                     </h2>
-                    {isPaid && subscription?.type && (
+                    {isPaid && (
+                      // ✅ Uses planType (from backend) not subscription?.type
                       <p className="text-sm text-gray-600 capitalize">
-                        {subscription.type} • {daysRemaining} days remaining
+                        {planType} • {daysRemaining} days remaining
                       </p>
                     )}
                   </div>
                 </div>
+
                 {!isPaid && (
                   <button
                     onClick={handleUpgrade}
@@ -122,6 +124,7 @@ const Dashboard = () => {
                 )}
               </div>
             </div>
+
             {!isPaid && (
               <button
                 onClick={handleUpgrade}
@@ -132,12 +135,12 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Partner Program Card */}
+          {/* ── Partner Program Card ──────────────────────────────────── */}
           <div
             onClick={handleReferrals}
             className="bg-gradient-to-br from-indigo-900 to-[#5247bf] rounded-2xl shadow-xl p-8 flex flex-col justify-center text-white cursor-pointer hover:scale-[1.02] transition-all duration-300 relative overflow-hidden group"
           >
-            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
+            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all" />
 
             <div className="flex items-center justify-between z-10">
               <div className="flex items-center gap-5">
@@ -167,7 +170,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Business Tools Grid (3 Columns on Desktop) */}
+        {/* ── Business Tools Grid ───────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Business Tools */}
           <div

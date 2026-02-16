@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSubscription } from "../context/SubscriptionContext"; // Added Context
+import { useSubscription } from "../context/SubscriptionContext";
 import {
   Search,
   Edit,
@@ -10,78 +10,105 @@ import {
   Loader2,
   Save,
   X,
-  Lock, // Added Lock Icon
+  Lock,
 } from "lucide-react";
-import { db } from "../lib/firebase";
-import { doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { toast } from "react-toastify";
+import api from "../lib/api";
 
-const CustomerList = ({ customers, loading }) => {
-  const { isPaid } = useSubscription(); // Get subscription status
+const CustomerList = ({ customers, loading, onCustomersChange }) => {
+  const { isPaid } = useSubscription();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [updating, setUpdating] = useState(false);
-  const [showLimitModal, setShowLimitModal] = useState(false); // Modal State
+  const [deletingId, setDeletingId] = useState(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   const filtered = customers.filter(
     (c) =>
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.state?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.productInterest?.toLowerCase().includes(searchTerm.toLowerCase())
+      c.productInterest?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
+  // ✅ Delete via backend
   const handleDelete = async (id) => {
-    // --- LOCK CHECK ---
     if (!isPaid) {
       setShowLimitModal(true);
       return;
     }
-
     if (!window.confirm("Delete this customer?")) return;
+
+    setDeletingId(id);
     try {
-      await deleteDoc(doc(db, "customers", id));
+      await api.delete(`/customers/${id}`);
+      onCustomersChange((prev) => prev.filter((c) => c.id !== id));
       toast.success("Customer deleted");
-    } catch (e) {
-      toast.error("Delete failed");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error("Delete failed");
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const handleEdit = (customer) => {
     setEditingId(customer.id);
-    setEditForm(customer);
+    setEditForm({ ...customer });
   };
 
+  // ✅ Update via backend
   const handleUpdate = async () => {
     if (!editingId) return;
     setUpdating(true);
     try {
-      await updateDoc(doc(db, "customers", editingId), {
+      await api.patch(`/customers/${editingId}`, {
         name: editForm.name,
         email: editForm.email,
         phone: editForm.phone,
         state: editForm.state,
         productInterest: editForm.productInterest,
       });
+
+      onCustomersChange((prev) =>
+        prev.map((c) =>
+          c.id === editingId
+            ? {
+                ...c,
+                name: editForm.name,
+                email: editForm.email,
+                phone: editForm.phone,
+                state: editForm.state,
+                productInterest: editForm.productInterest,
+              }
+            : c,
+        ),
+      );
+
       toast.success("Customer updated");
       setEditingId(null);
-    } catch (e) {
-      toast.error("Update failed");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Update failed");
     } finally {
       setUpdating(false);
     }
   };
 
-  if (loading)
+  if (loading) {
     return (
       <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
         <div className="flex space-x-2">
-          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse"></span>
-          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-200"></span>
-          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-400"></span>
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-200" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-400" />
         </div>
       </section>
     );
+  }
 
   return (
     <div className="space-y-6">
@@ -103,9 +130,10 @@ const CustomerList = ({ customers, loading }) => {
             className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition"
           >
             {editingId === customer.id ? (
+              /* ── Edit Mode ─────────────────────────────────────── */
               <div className="space-y-3">
                 <input
-                  value={editForm.name}
+                  value={editForm.name || ""}
                   onChange={(e) =>
                     setEditForm({ ...editForm, name: e.target.value })
                   }
@@ -113,7 +141,7 @@ const CustomerList = ({ customers, loading }) => {
                   placeholder="Name"
                 />
                 <input
-                  value={editForm.phone}
+                  value={editForm.phone || ""}
                   onChange={(e) =>
                     setEditForm({ ...editForm, phone: e.target.value })
                   }
@@ -121,7 +149,15 @@ const CustomerList = ({ customers, loading }) => {
                   placeholder="Phone"
                 />
                 <input
-                  value={editForm.state}
+                  value={editForm.email || ""}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, email: e.target.value })
+                  }
+                  className="w-full p-2 border rounded text-sm"
+                  placeholder="Email"
+                />
+                <input
+                  value={editForm.state || ""}
                   onChange={(e) =>
                     setEditForm({ ...editForm, state: e.target.value })
                   }
@@ -129,7 +165,7 @@ const CustomerList = ({ customers, loading }) => {
                   placeholder="State"
                 />
                 <input
-                  value={editForm.productInterest}
+                  value={editForm.productInterest || ""}
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
@@ -149,18 +185,19 @@ const CustomerList = ({ customers, loading }) => {
                       <Loader2 className="w-3 h-3 animate-spin" />
                     ) : (
                       <Save className="w-3 h-3" />
-                    )}{" "}
-                    Save
+                    )}
+                    {updating ? "Saving..." : "Save"}
                   </button>
                   <button
                     onClick={() => setEditingId(null)}
-                    className="flex-1 bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium"
+                    className="flex-1 bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium flex justify-center items-center gap-1"
                   >
-                    Cancel
+                    <X className="w-3 h-3" /> Cancel
                   </button>
                 </div>
               </div>
             ) : (
+              /* ── View Mode ─────────────────────────────────────── */
               <>
                 <div className="flex justify-between items-start mb-3">
                   <h3 className="font-bold text-gray-900 truncate">
@@ -173,18 +210,19 @@ const CustomerList = ({ customers, loading }) => {
                     >
                       <Edit className="w-4 h-4" />
                     </button>
-                    {/* Delete Button */}
                     <button
                       onClick={() => handleDelete(customer.id)}
-                      disabled={!isPaid}
+                      disabled={!isPaid || deletingId === customer.id}
                       title={!isPaid ? "Upgrade to delete" : "Delete"}
-                      className={`p-1.5 rounded transition ${
+                      className={`p-1.5 rounded transition disabled:opacity-60 ${
                         !isPaid
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "text-gray-400 hover:text-red-600 hover:bg-red-50"
                       }`}
                     >
-                      {!isPaid ? (
+                      {deletingId === customer.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : !isPaid ? (
                         <Lock className="w-4 h-4" />
                       ) : (
                         <Trash2 className="w-4 h-4" />
@@ -206,8 +244,9 @@ const CustomerList = ({ customers, loading }) => {
                   )}
                   {customer.state && (
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-[#5247bf]" />{" "}
-                      {customer.state}, {customer.country}
+                      <MapPin className="w-4 h-4 text-[#5247bf]" />
+                      {customer.state}
+                      {customer.country ? `, ${customer.country}` : ""}
                     </div>
                   )}
                 </div>
@@ -226,6 +265,7 @@ const CustomerList = ({ customers, loading }) => {
             )}
           </div>
         ))}
+
         {filtered.length === 0 && (
           <div className="col-span-full text-center py-10 text-gray-500">
             No customers found.

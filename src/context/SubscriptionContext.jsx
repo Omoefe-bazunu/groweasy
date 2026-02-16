@@ -1,111 +1,96 @@
 // src/context/SubscriptionContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import {
-  doc,
-  onSnapshot,
-  collection,
-  query,
-  where,
-  getCountFromServer,
-} from "firebase/firestore";
-import { auth, db } from "../lib/firebase";
+import { useUser } from "./UserContext";
+import api from "../lib/api";
 
 const SubscriptionContext = createContext();
 
 export const SubscriptionProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  // ✅ Watch userData, not user — userData is only set after the
+  // Firestore profile exists, preventing race condition 404s
+  const { userData } = useUser();
+
   const [subscription, setSubscription] = useState(null);
+  const [isPaid, setIsPaid] = useState(false);
+  const [daysRemaining, setDaysRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Document limits per collection (free tier)
-  const FREE_LIMIT = 10;
-
-  // Updated list of collections to track
-  const COLLECTIONS = [
-    "receipts",
-    "invoices",
-    "financialRecords",
-    "quotations", // Added
-    "inventory", // Added
-    "payrolls",
-    "customers", // Added
-  ];
-
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (!currentUser) {
-        setSubscription(null);
+    if (!userData) {
+      setSubscription(null);
+      setIsPaid(false);
+      setDaysRemaining(0);
+      setLoading(false);
+      return;
+    }
+
+    const fetchStatus = async () => {
+      try {
+        const res = await api.get("/subscription/status");
+        setSubscription(res.data.subscription);
+        setIsPaid(res.data.isPaid);
+        setDaysRemaining(res.data.daysRemaining);
+      } catch (err) {
+        console.error("Failed to fetch subscription:", err.message);
+      } finally {
         setLoading(false);
-        return;
       }
+    };
 
-      // Listen to user's subscription doc
-      const subRef = doc(db, "subscriptions", currentUser.uid);
-      const unsubscribeSub = onSnapshot(subRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const isActive =
-            data.status === "active" &&
-            new Date(data.expiresAt.seconds * 1000) > new Date();
-          setSubscription(isActive ? data : null);
-        } else {
-          setSubscription(null);
-        }
-        setLoading(false);
-      });
+    fetchStatus();
+  }, [userData]);
 
-      return () => unsubscribeSub();
-    });
+  // ── Derived values ────────────────────────────────────────────────────────
+  // planType: "yearly" | "monthly"
+  const planType = subscription?.planType || "monthly";
 
-    return () => unsubscribeAuth();
-  }, []);
+  // planLabel: human-readable plan name for display
+  const planLabel = isPaid
+    ? subscription?.plan || "Pro"
+    : subscription?.status === "trial"
+      ? "Free Trial"
+      : "Free Plan";
 
-  // Count documents in a collection for current user
-  const getDocumentCount = async (collectionName) => {
-    if (!user) return 0;
-    const colRef = collection(db, collectionName);
-    const q = query(colRef, where("userId", "==", user.uid));
-    const snapshot = await getCountFromServer(q);
-    return snapshot.data().count;
-  };
+  // subscriptionStatus: "active" | "trial" | "expired" | null
+  const subscriptionStatus = subscription?.status || null;
 
-  // Check if user can write to a collection
+  // ── Async helpers (call these before any write operation) ─────────────────
+
+  // Returns true if user is allowed to create a new document in this collection
   const canWriteTo = async (collectionName) => {
-    if (!user) return false;
-    if (subscription) return true; // Paid = unlimited
-
-    const count = await getDocumentCount(collectionName);
-    return count < FREE_LIMIT;
+    if (!userData) return false;
+    try {
+      const res = await api.get(`/subscription/can-write/${collectionName}`);
+      return res.data.canWrite;
+    } catch {
+      return false;
+    }
   };
 
-  // Get limit status (for UI messages)
+  // Returns full limit info for UI messages
+  // { canWrite, reached, current, limit } or { canWrite, unlimited }
   const getLimitStatus = async (collectionName) => {
-    if (!user) return { reached: true, current: 0, limit: FREE_LIMIT };
-    if (subscription) return { reached: false, unlimited: true };
-
-    const count = await getDocumentCount(collectionName);
-    return { reached: count >= FREE_LIMIT, current: count, limit: FREE_LIMIT };
+    if (!userData) return { reached: true, current: 0, limit: 10 };
+    try {
+      const res = await api.get(`/subscription/can-write/${collectionName}`);
+      return res.data;
+    } catch {
+      return { reached: true, current: 0, limit: 10 };
+    }
   };
 
   return (
     <SubscriptionContext.Provider
       value={{
-        user,
-        subscription,
-        loading,
-        isPaid: !!subscription,
-        canWriteTo,
-        getLimitStatus,
-        collections: COLLECTIONS,
-        subscriptionType: subscription?.type || "free", // monthly | yearly
-        daysRemaining: subscription
-          ? Math.ceil(
-              (new Date(subscription.expiresAt.seconds * 1000) - new Date()) /
-                (1000 * 60 * 60 * 24)
-            )
-          : 0,
+        subscription, // raw subscription object from backend
+        loading, // true while fetching on mount
+        isPaid, // boolean — true only when status === "active"
+        daysRemaining, // number of days until subscription expires
+        planType, // "yearly" | "monthly"
+        planLabel, // "Free Trial" | "Free Plan" | "Monthly" | "Yearly"
+        subscriptionStatus, // "active" | "trial" | "expired" | null
+        canWriteTo, // async (collectionName) => boolean
+        getLimitStatus, // async (collectionName) => { reached, current, limit }
       }}
     >
       {children}

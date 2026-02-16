@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { db } from "../lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import api from "../lib/api";
 import ProfileCard from "../components/ProfileCard";
 
 const PublicProfile = () => {
@@ -14,31 +13,25 @@ const PublicProfile = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const profileRef = doc(db, "profiles", userId);
-        const profileSnap = await getDoc(profileRef);
-        if (profileSnap.exists()) {
-          const data = profileSnap.data();
-          const formattedData = {
-            ...data,
-            productsServices: Array.isArray(data.productsServices)
-              ? data.productsServices
-              : [],
-            socialLinks: Array.isArray(data.socialLinks)
-              ? data.socialLinks
-              : [],
-          };
-          setProfile(formattedData);
-          setImageIndices(
-            formattedData.productsServices.reduce(
-              (acc, _, index) => ({ ...acc, [index]: 0 }),
-              {}
-            )
-          );
-        } else {
-          setError("Profile not found.");
-        }
+        const res = await api.get(`/profiles/public/${userId}`);
+        const data = res.data.profile;
+        const formattedData = {
+          ...data,
+          productsServices: Array.isArray(data.productsServices)
+            ? data.productsServices
+            : [],
+          socialLinks: Array.isArray(data.socialLinks) ? data.socialLinks : [],
+          ctas: Array.isArray(data.ctas) ? data.ctas : [],
+        };
+        setProfile(formattedData);
+        setImageIndices(
+          formattedData.productsServices.reduce(
+            (acc, _, index) => ({ ...acc, [index]: 0 }),
+            {},
+          ),
+        );
       } catch (err) {
-        setError("Failed to fetch profile.");
+        setError("Profile not found.");
         console.error(err);
       } finally {
         setLoading(false);
@@ -85,7 +78,7 @@ const PublicProfile = () => {
       profile={profile}
       imageIndices={imageIndices}
       onImageNavigation={handleImageNavigation}
-      isOwner={false} // PUBLIC MODE
+      isOwner={false}
     />
   );
 };

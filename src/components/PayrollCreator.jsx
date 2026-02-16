@@ -1,18 +1,9 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { db } from "../lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "react-toastify";
-import {
-  RotateCcw,
-  Save,
-  Lock,
-  Loader2,
-  LockIcon,
-  Plus,
-  X,
-} from "lucide-react";
+import api from "../lib/api";
+import { RotateCcw, Save, Lock, Loader2, Plus } from "lucide-react";
 
 const COLLECTION_NAME = "payrolls";
 
@@ -28,70 +19,61 @@ const PayrollCreator = () => {
     limit: 10,
   });
 
-  const [formData, setFormData] = useState({
+  const defaultForm = {
     companyName: "",
     address: "",
-    payPeriod: new Date().toISOString().slice(0, 7), // YYYY-MM
+    payPeriod: new Date().toISOString().slice(0, 7),
     paymentDate: new Date().toISOString().split("T")[0],
-    brandColor: "#10b981", // Emerald green for money/payroll
-
-    // Employee Details
+    brandColor: "#10b981",
     employeeName: "",
     employeeRole: "",
     employeeId: "",
     bankName: "",
     accountNumber: "",
-
-    // Financials
     basicSalary: "",
     earnings: [{ description: "Housing Allowance", amount: "" }],
     deductions: [{ description: "Tax / PAYE", amount: "" }],
-  });
+  };
 
-  // Load limit status
+  const [formData, setFormData] = useState(defaultForm);
+
   useEffect(() => {
     if (user && !isPaid) {
       getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
     }
   }, [user, isPaid, getLimitStatus]);
 
-  // Input Handlers
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Dynamic Field Handlers (Earnings/Deductions)
   const handleDynamicChange = (type, index, field, value) => {
     const updated = [...formData[type]];
-    updated[index][field] = value;
-    setFormData({ ...formData, [type]: updated });
+    updated[index] = { ...updated[index], [field]: value };
+    setFormData((prev) => ({ ...prev, [type]: updated }));
   };
 
-  const addField = (type) => {
-    setFormData({
-      ...formData,
-      [type]: [...formData[type], { description: "", amount: "" }],
-    });
-  };
+  const addField = (type) =>
+    setFormData((prev) => ({
+      ...prev,
+      [type]: [...prev[type], { description: "", amount: "" }],
+    }));
 
-  const removeField = (type, index) => {
-    const updated = [...formData[type]];
-    updated.splice(index, 1);
-    setFormData({ ...formData, [type]: updated });
-  };
+  const removeField = (type, index) =>
+    setFormData((prev) => ({
+      ...prev,
+      [type]: prev[type].filter((_, i) => i !== index),
+    }));
 
-  // Calculations
-  const formatCurrency = (value) => {
-    return parseFloat(value || 0).toLocaleString("en-NG", {
+  const formatCurrency = (value) =>
+    parseFloat(value || 0).toLocaleString("en-NG", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  };
 
-  const calculateTotal = (items) => {
-    return items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
-  };
+  const calculateTotal = (items) =>
+    items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
   const totalEarnings =
     (parseFloat(formData.basicSalary) || 0) + calculateTotal(formData.earnings);
@@ -111,46 +93,36 @@ const PayrollCreator = () => {
 
     setLoading(true);
     try {
-      const payrollData = {
-        userId: user.uid,
+      await api.post("/payrolls", {
         ...formData,
         totalEarnings: totalEarnings.toFixed(2),
         totalDeductions: totalDeductions.toFixed(2),
         netPay: netPay.toFixed(2),
-        createdAt: serverTimestamp(),
-      };
+      });
 
-      await addDoc(collection(db, COLLECTION_NAME), payrollData);
       toast.success("Payslip saved successfully!");
       handleReset();
       if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
-    } catch (error) {
-      console.error("Error saving payroll:", error);
-      toast.error("Failed to save payslip");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error(err.response?.data?.error || "Failed to save payslip");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
-    setFormData({
-      ...formData,
-      employeeName: "",
-      employeeRole: "",
-      employeeId: "",
-      bankName: "",
-      accountNumber: "",
-      basicSalary: "",
-      earnings: [{ description: "Housing Allowance", amount: "" }],
-      deductions: [{ description: "Tax / PAYE", amount: "" }],
-    });
+    setFormData(defaultForm);
     toast.info("Form cleared");
   };
 
   return (
     <div className="min-h-screen w-full bg-gray-50 px-2 py-6 text-gray-600">
       <div className="w-full mx-auto max-w-7xl">
-        {/* Header Section */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
@@ -163,7 +135,6 @@ const PayrollCreator = () => {
               </p>
             )}
           </div>
-
           <div className="flex gap-3">
             <button
               onClick={handleReset}
@@ -181,19 +152,23 @@ const PayrollCreator = () => {
               }`}
             >
               {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" /> Saving...
+                </>
               ) : (
-                <Save className="w-5 h-5" />
+                <>
+                  <Save className="w-5 h-5" />{" "}
+                  {limitStatus.reached && !isPaid
+                    ? "Upgrade to Continue"
+                    : "Save Payslip"}
+                </>
               )}
-              {limitStatus.reached && !isPaid
-                ? "Upgrade to Continue"
-                : "Save Payslip"}
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* INPUT FORM */}
+          {/* ── Form ─────────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
             {/* Company Info */}
             <div className="space-y-4">
@@ -230,6 +205,18 @@ const PayrollCreator = () => {
                   value={formData.paymentDate}
                   onChange={handleInputChange}
                   className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#10b981]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Brand Color
+                </label>
+                <input
+                  type="color"
+                  name="brandColor"
+                  value={formData.brandColor}
+                  onChange={handleInputChange}
+                  className="w-full h-12 border rounded-lg cursor-pointer"
                 />
               </div>
             </div>
@@ -285,13 +272,12 @@ const PayrollCreator = () => {
               </div>
             </div>
 
-            {/* Salary Calculation */}
+            {/* Salary */}
             <div className="space-y-4 pt-4">
               <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                 Salary & Deductions
               </h3>
 
-              {/* Basic Salary */}
               <div>
                 <label className="text-sm font-medium text-gray-700">
                   Basic Salary
@@ -306,7 +292,7 @@ const PayrollCreator = () => {
                 />
               </div>
 
-              {/* Dynamic Earnings */}
+              {/* Earnings */}
               <div className="bg-green-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-semibold text-green-800">
@@ -321,7 +307,7 @@ const PayrollCreator = () => {
                 </div>
                 {formData.earnings.map((item, index) => (
                   <div key={index} className="flex gap-2 mb-2 flex-col">
-                    <div className=" flex gap-2 justify-between">
+                    <div className="flex gap-2 justify-between">
                       <input
                         type="text"
                         placeholder="Description"
@@ -331,7 +317,7 @@ const PayrollCreator = () => {
                             "earnings",
                             index,
                             "description",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="flex-1 p-2 border rounded text-sm"
@@ -345,7 +331,7 @@ const PayrollCreator = () => {
                             "earnings",
                             index,
                             "amount",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="w-28 p-2 border rounded text-sm"
@@ -353,7 +339,7 @@ const PayrollCreator = () => {
                     </div>
                     <button
                       onClick={() => removeField("earnings", index)}
-                      className="bg-red-500 text-white px-4 py-2 w-full hover:bg-red-700 rounded"
+                      className="bg-red-500 text-white px-4 py-2 w-full hover:bg-red-700 rounded text-sm"
                     >
                       Remove
                     </button>
@@ -361,7 +347,7 @@ const PayrollCreator = () => {
                 ))}
               </div>
 
-              {/* Dynamic Deductions */}
+              {/* Deductions */}
               <div className="bg-red-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <h4 className="font-semibold text-red-800">
@@ -376,7 +362,7 @@ const PayrollCreator = () => {
                 </div>
                 {formData.deductions.map((item, index) => (
                   <div key={index} className="flex gap-2 mb-2 flex-col">
-                    <div className=" flex gap-2 justify-between">
+                    <div className="flex gap-2 justify-between">
                       <input
                         type="text"
                         placeholder="Description"
@@ -386,7 +372,7 @@ const PayrollCreator = () => {
                             "deductions",
                             index,
                             "description",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="flex-1 p-2 border rounded text-sm"
@@ -400,7 +386,7 @@ const PayrollCreator = () => {
                             "deductions",
                             index,
                             "amount",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="w-28 p-2 border rounded text-sm"
@@ -408,7 +394,7 @@ const PayrollCreator = () => {
                     </div>
                     <button
                       onClick={() => removeField("deductions", index)}
-                      className="bg-red-500 text-white px-4 py-2 w-full hover:bg-red-700 rounded"
+                      className="bg-red-500 text-white px-4 py-2 w-full hover:bg-red-700 rounded text-sm"
                     >
                       Remove
                     </button>
@@ -418,7 +404,7 @@ const PayrollCreator = () => {
             </div>
           </div>
 
-          {/* PREVIEW SIDE */}
+          {/* ── Preview ───────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Payslip Preview
@@ -427,7 +413,6 @@ const PayrollCreator = () => {
               id="payslip-preview"
               className="bg-white border border-gray-200 rounded-lg overflow-hidden"
             >
-              {/* Header */}
               <div
                 className="p-6 text-white"
                 style={{ backgroundColor: formData.brandColor }}
@@ -452,7 +437,6 @@ const PayrollCreator = () => {
                 </div>
               </div>
 
-              {/* Employee Details */}
               <div className="p-6 border-b bg-gray-50">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
@@ -470,7 +454,10 @@ const PayrollCreator = () => {
                   <div>
                     <p className="text-gray-500">Payment Method</p>
                     <p className="font-bold text-gray-800">
-                      {formData.bankName} - {formData.accountNumber}
+                      {formData.bankName || "-"}{" "}
+                      {formData.accountNumber
+                        ? `- ${formData.accountNumber}`
+                        : ""}
                     </p>
                   </div>
                   <div className="text-right">
@@ -482,10 +469,8 @@ const PayrollCreator = () => {
                 </div>
               </div>
 
-              {/* Financial Table */}
               <div className="p-6">
                 <div className="grid grid-cols-1 gap-8">
-                  {/* Earnings */}
                   <div>
                     <h3 className="font-bold text-gray-700 border-b pb-2 mb-2">
                       Earnings:
@@ -509,8 +494,6 @@ const PayrollCreator = () => {
                       </div>
                     </div>
                   </div>
-
-                  {/* Deductions */}
                   <div>
                     <h3 className="font-bold text-gray-700 border-b pb-2 mb-2">
                       Deductions:
@@ -533,7 +516,6 @@ const PayrollCreator = () => {
                 </div>
               </div>
 
-              {/* Net Pay Footer */}
               <div className="bg-gray-100 p-6 flex justify-between items-center border-t">
                 <p className="text-gray-600 font-medium">Net Payable</p>
                 <p
@@ -546,32 +528,32 @@ const PayrollCreator = () => {
             </div>
           </div>
         </div>
-
-        {/* Upgrade Modal (Same as Invoice) */}
-        {showLimitModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-8 text-center max-w-md">
-              <Lock className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold mb-2">Limit Reached</h3>
-              <p className="mb-6 text-gray-600">
-                Upgrade to generate unlimited payslips.
-              </p>
-              <button
-                onClick={() => (window.location.href = "/subscribe")}
-                className="bg-green-600 text-white w-full py-3 rounded hover:bg-green-700"
-              >
-                Upgrade Now
-              </button>
-              <button
-                onClick={() => setShowLimitModal(false)}
-                className="mt-4 text-gray-500 hover:text-gray-700"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Upgrade Modal */}
+      {showLimitModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 text-center max-w-md">
+            <Lock className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+            <h3 className="text-2xl font-bold mb-2">Limit Reached</h3>
+            <p className="mb-6 text-gray-600">
+              Upgrade to generate unlimited payslips.
+            </p>
+            <button
+              onClick={() => (window.location.href = "/subscribe")}
+              className="bg-[#10b981] text-white w-full py-3 rounded hover:bg-[#059669]"
+            >
+              Upgrade Now
+            </button>
+            <button
+              onClick={() => setShowLimitModal(false)}
+              className="mt-4 text-gray-500 hover:text-gray-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

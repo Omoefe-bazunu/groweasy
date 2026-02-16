@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { db } from "../lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "react-toastify";
+import api from "../lib/api";
 import { RotateCcw, Save, Lock, Loader2, LockIcon } from "lucide-react";
-import { Link } from "react-router-dom";
 
 const COLLECTION_NAME = "receipts";
 
@@ -21,7 +19,7 @@ const ReceiptCreator = () => {
     limit: 10,
   });
 
-  const [formData, setFormData] = useState({
+  const defaultForm = {
     businessName: "",
     address: "",
     contactEmail: "",
@@ -44,9 +42,10 @@ const ReceiptCreator = () => {
     paymentMethod: "",
     dueDate: "",
     interestRate: "",
-  });
+  };
 
-  // Load free-tier usage count
+  const [formData, setFormData] = useState(defaultForm);
+
   useEffect(() => {
     if (user && !isPaid) {
       getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
@@ -64,12 +63,11 @@ const ReceiptCreator = () => {
     setFormData((prev) => ({ ...prev, items: updatedItems }));
   };
 
-  const formatCurrency = (value) => {
-    return parseFloat(value || 0).toLocaleString("en-NG", {
+  const formatCurrency = (value) =>
+    parseFloat(value || 0).toLocaleString("en-NG", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  };
 
   const calculateAmount = (qty, unitPrice) =>
     (parseFloat(qty) || 0) * (parseFloat(unitPrice) || 0);
@@ -83,7 +81,6 @@ const ReceiptCreator = () => {
     );
   const calculateOutstandingBalance = () =>
     calculateTotal() - (parseFloat(formData.amountPaid) || 0);
-
   const calculateInterestCharges = () => {
     if (!formData.dueDate || !formData.interestRate) return 0;
     const today = new Date();
@@ -108,89 +105,29 @@ const ReceiptCreator = () => {
 
     setLoading(true);
     try {
-      const receiptData = {
-        userId: user.uid,
-        businessName: formData.businessName,
-        address: formData.address,
-        contactEmail: formData.contactEmail,
-        contactNumber: formData.contactNumber,
-        date: formData.date,
-        brandColor: formData.brandColor,
-        clientName: formData.clientName,
-        clientContact: formData.clientContact,
-        clientLocation: formData.clientLocation,
-        clientOccupation: formData.clientOccupation,
-        items: formData.items.filter((i) => i.details && i.qty && i.unitPrice),
-        signatureName: formData.signatureName,
-        signatoryPosition: formData.signatoryPosition,
-        total: calculateTotal().toFixed(2),
-        amountPaid: formData.amountPaid || "",
-        paymentMethod: formData.paymentMethod || "",
-        dueDate: formData.dueDate || "",
-        interestRate: formData.interestRate || "",
-        createdAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, COLLECTION_NAME), receiptData);
-      toast.success("Receipt saved successfully!");
-
-      setFormData({
+      await api.post("/receipts", {
         ...formData,
-        businessName: "",
-        address: "",
-        contactEmail: "",
-        contactNumber: "",
-        clientName: "",
-        clientContact: "",
-        clientLocation: "",
-        clientOccupation: "",
-        items: Array(10).fill({
-          details: "",
-          qty: "",
-          unitPrice: "",
-          discount: "",
-        }),
-        signatureName: "",
-        signatoryPosition: "",
-        amountPaid: "",
-        paymentMethod: "",
-        dueDate: "",
-        interestRate: "",
+        items: formData.items.filter((i) => i.details && i.qty && i.unitPrice),
+        total: calculateTotal().toFixed(2),
       });
 
+      toast.success("Receipt saved successfully!");
+      handleReset();
+
       if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
-    } catch (error) {
-      console.error("Error saving receipt:", error);
-      toast.error("Failed to save receipt — upgrade required?");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error(err.response?.data?.error || "Failed to save receipt");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
-    setFormData({
-      ...formData,
-      businessName: "",
-      address: "",
-      contactEmail: "",
-      contactNumber: "",
-      clientName: "",
-      clientContact: "",
-      clientLocation: "",
-      clientOccupation: "",
-      items: Array(10).fill({
-        details: "",
-        qty: "",
-        unitPrice: "",
-        discount: "",
-      }),
-      signatureName: "",
-      signatoryPosition: "",
-      amountPaid: "",
-      paymentMethod: "",
-      dueDate: "",
-      interestRate: "",
-    });
+    setFormData(defaultForm);
     toast.info("Form cleared");
   };
 
@@ -212,8 +149,7 @@ const ReceiptCreator = () => {
               onClick={handleReset}
               className="flex items-center gap-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
             >
-              <RotateCcw className="w-4 h-4" />
-              Reset
+              <RotateCcw className="w-4 h-4" /> Reset
             </button>
             <div className="relative group">
               <button
@@ -227,25 +163,21 @@ const ReceiptCreator = () => {
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Saving...
+                    <Loader2 className="w-5 h-5 animate-spin" /> Saving...
                   </>
                 ) : limitStatus.reached && !isPaid ? (
                   <>
-                    <LockIcon className="w-5 h-5" />
-                    Upgrade to Continue
+                    <LockIcon className="w-5 h-5" /> Upgrade to Continue
                   </>
                 ) : (
                   <>
-                    <Save className="w-5 h-5" />
-                    Save Receipt
+                    <Save className="w-5 h-5" /> Save Receipt
                   </>
                 )}
               </button>
               {limitStatus.reached && !isPaid && (
                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-orange-400 text-white text-xs px-3 py-2 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10">
-                  You've reached 10 free receipt creations. Upgrade for
-                  unlimited!
+                  You've reached 10 free receipts. Upgrade for unlimited!
                 </div>
               )}
             </div>
@@ -253,7 +185,7 @@ const ReceiptCreator = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Form */}
+          {/* ── Form ─────────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
             <h2 className="text-xl font-semibold text-gray-900">
               Receipt Details
@@ -341,6 +273,7 @@ const ReceiptCreator = () => {
               </div>
             </div>
 
+            {/* Client Info */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Client Information
@@ -383,6 +316,7 @@ const ReceiptCreator = () => {
               </div>
             </div>
 
+            {/* Items */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Items
@@ -436,6 +370,7 @@ const ReceiptCreator = () => {
               </div>
             </div>
 
+            {/* Payment Details */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Payment Details (Optional)
@@ -486,6 +421,7 @@ const ReceiptCreator = () => {
               </div>
             </div>
 
+            {/* Signatory */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Signatory
@@ -511,7 +447,7 @@ const ReceiptCreator = () => {
             </div>
           </div>
 
-          {/* Preview */}
+          {/* ── Preview ───────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Preview
@@ -739,20 +675,11 @@ const ReceiptCreator = () => {
             <p className="text-gray-600 mb-8">
               Upgrade to Pro for <strong>unlimited</strong> receipts.
             </p>
-            <div className="space-y-3 mb-8 bg-gray-50 p-4 rounded-lg">
-              <div className="text-lg">Monthly — ₦5,000</div>
-              <div className="text-xl font-bold text-green-600">
-                Yearly — ₦50,000{" "}
-                <span className="text-sm font-normal text-gray-500">
-                  (Save 17%)
-                </span>
-              </div>
-            </div>
             <button
               onClick={() => (window.location.href = "/subscribe")}
               className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-semibold hover:bg-[#4238a6] transition"
             >
-              Subscribe Now (Bank Transfer)
+              Subscribe Now
             </button>
             <button
               onClick={() => setShowLimitModal(false)}

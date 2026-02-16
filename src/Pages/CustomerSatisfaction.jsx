@@ -1,13 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { db } from "../lib/firebase";
 import { useUser } from "../context/UserContext";
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  orderBy,
-} from "firebase/firestore";
 import {
   Star,
   Globe,
@@ -18,69 +10,67 @@ import {
   Copy,
   Check,
   Download,
-  Landmark,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import QRCode from "react-qr-code";
+import api from "../lib/api";
 
-/**
- * GrowEasy Customer Satisfaction Dashboard
- * Features: Real-time analytics, Location tracking, QR Code PNG Export.
- */
 const CustomerSatisfaction = () => {
   const { user } = useUser();
   const [ratings, setRatings] = useState([]);
   const [filteredRatings, setFilteredRatings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const qrRef = useRef(); // Reference for the high-res QR download
+  const qrRef = useRef();
 
   const [timeframe, setTimeframe] = useState("month");
   const [regionFilter, setRegionFilter] = useState("All");
 
   const publicLink = `${window.location.origin}/rate/${user?.uid}`;
 
-  // 1. Fetch data from Firestore
+  // ✅ Replaced onSnapshot with backend fetch
   useEffect(() => {
     if (!user) return;
-
-    const q = query(
-      collection(db, "customer_ratings"),
-      where("businessId", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      }));
-      setRatings(data);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    fetchRatings();
   }, [user]);
 
-  // 2. Filter Logic
+  const fetchRatings = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/ratings");
+      // Convert ISO string back to Date objects for filter comparisons
+      const data = res.data.ratings.map((r) => ({
+        ...r,
+        createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
+      }));
+      setRatings(data);
+    } catch (err) {
+      console.error("Error fetching ratings:", err);
+      toast.error("Failed to load ratings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter logic — unchanged from original
   useEffect(() => {
     let filtered = [...ratings];
     const now = new Date();
 
     if (timeframe === "week") {
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter((r) => r.createdAt >= weekAgo);
+      const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter((r) => r.createdAt >= cutoff);
     } else if (timeframe === "month") {
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter((r) => r.createdAt >= monthAgo);
+      const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter((r) => r.createdAt >= cutoff);
     } else if (timeframe === "quarter") {
-      const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter((r) => r.createdAt >= quarterAgo);
+      const cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter((r) => r.createdAt >= cutoff);
     } else if (timeframe === "year") {
-      const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter((r) => r.createdAt >= yearAgo);
+      const cutoff = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter((r) => r.createdAt >= cutoff);
     }
+    // "all" — no date filter
 
     if (regionFilter !== "All") {
       filtered = filtered.filter((r) => r.location?.state === regionFilter);
@@ -89,7 +79,7 @@ const CustomerSatisfaction = () => {
     setFilteredRatings(filtered);
   }, [ratings, timeframe, regionFilter]);
 
-  // 3. Download Logic (SVG to high-res PNG)
+  // QR download — unchanged
   const downloadQRCode = () => {
     const svg = qrRef.current.querySelector("svg");
     const svgData = new XMLSerializer().serializeToString(svg);
@@ -97,15 +87,13 @@ const CustomerSatisfaction = () => {
     const ctx = canvas.getContext("2d");
     const img = new Image();
 
-    // Set high resolution (1000x1000)
     canvas.width = 1000;
     canvas.height = 1000;
 
     img.onload = () => {
-      ctx.fillStyle = "white"; // Solid background
+      ctx.fillStyle = "white";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, 1000, 1000);
-
       const pngFile = canvas.toDataURL("image/png");
       const downloadLink = document.createElement("a");
       downloadLink.download = `GrowEasy-Rating-QR-${user?.uid.slice(0, 5)}.png`;
@@ -138,12 +126,13 @@ const CustomerSatisfaction = () => {
     return ["All", ...new Set(regions)];
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="p-20 text-center font-bold text-[#5247bf]">
         Loading ...
       </div>
     );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-32 pt-8 px-4 md:px-12">
@@ -158,7 +147,6 @@ const CustomerSatisfaction = () => {
               Track real-time feedback and grow your business reputation.
             </p>
           </div>
-
           <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
             <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
               <p className="text-xs font-bold uppercase tracking-widest mb-2 opacity-70">
@@ -186,7 +174,7 @@ const CustomerSatisfaction = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Sidebar: Filters & Counts */}
+          {/* Sidebar */}
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100">
               <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
@@ -237,9 +225,8 @@ const CustomerSatisfaction = () => {
             </div>
           </div>
 
-          {/* Main Area: Score Meter & Recent Activity */}
+          {/* Main */}
           <div className="lg:col-span-8 space-y-8">
-            {/* Visual CSAT Meter */}
             <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
               <div className="p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-10">
                 <div className="text-center md:text-left">
@@ -258,7 +245,6 @@ const CustomerSatisfaction = () => {
                     ))}
                   </div>
                 </div>
-
                 <div className="relative w-48 h-48 flex items-center justify-center">
                   <svg className="w-full h-full transform -rotate-90">
                     <circle
@@ -293,7 +279,6 @@ const CustomerSatisfaction = () => {
               </div>
             </div>
 
-            {/* List of Feedbacks */}
             <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
               <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
                 <h3 className="text-lg font-black text-gray-900">
@@ -325,7 +310,9 @@ const CustomerSatisfaction = () => {
                         </div>
                       </div>
                       <span className="text-[10px] font-black text-gray-300 uppercase">
-                        {r.createdAt.toLocaleDateString()}
+                        {r.createdAt instanceof Date
+                          ? r.createdAt.toLocaleDateString()
+                          : new Date(r.createdAt).toLocaleDateString()}
                       </span>
                     </div>
                   ))
@@ -339,7 +326,7 @@ const CustomerSatisfaction = () => {
           </div>
         </div>
 
-        {/* High-Res QR Code Export Section */}
+        {/* QR Code Export */}
         <div className="mt-12 bg-white p-12 rounded-[3rem] border border-gray-100 shadow-sm text-center">
           <h3 className="text-2xl font-black text-gray-900 mb-2">
             Export Your QR Code
@@ -348,7 +335,6 @@ const CustomerSatisfaction = () => {
             Save your QR code as a high-quality PNG. Use it in digital receipts,
             printed posters, or social media.
           </p>
-
           <div className="flex flex-col items-center">
             <div
               ref={qrRef}
@@ -356,7 +342,6 @@ const CustomerSatisfaction = () => {
             >
               <QRCode value={publicLink} size={250} fgColor="#5247bf" />
             </div>
-
             <button
               onClick={downloadQRCode}
               className="bg-[#5247bf] text-white px-12 py-4 rounded-2xl font-black text-lg hover:bg-[#4238a6] transition-all flex items-center gap-3 shadow-xl shadow-indigo-100"

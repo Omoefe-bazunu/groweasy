@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { db } from "../lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "react-toastify";
+import api from "../lib/api";
 import { RotateCcw, Save, Lock, Loader2, LockIcon } from "lucide-react";
 
 const COLLECTION_NAME = "invoices";
@@ -20,7 +19,7 @@ const InvoiceCreator = () => {
     limit: 10,
   });
 
-  const [formData, setFormData] = useState({
+  const defaultForm = {
     businessName: "",
     address: "",
     contactEmail: "",
@@ -44,9 +43,10 @@ const InvoiceCreator = () => {
     accountName: "",
     accountNumber: "",
     bankName: "",
-  });
+  };
 
-  // Load free-tier usage count
+  const [formData, setFormData] = useState(defaultForm);
+
   useEffect(() => {
     if (user && !isPaid) {
       getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
@@ -64,12 +64,11 @@ const InvoiceCreator = () => {
     setFormData((prev) => ({ ...prev, items: updatedItems }));
   };
 
-  const formatCurrency = (value) => {
-    return parseFloat(value || 0).toLocaleString("en-NG", {
+  const formatCurrency = (value) =>
+    parseFloat(value || 0).toLocaleString("en-NG", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  };
 
   const calculateAmount = (qty, unitPrice) =>
     (parseFloat(qty) || 0) * (parseFloat(unitPrice) || 0);
@@ -79,7 +78,7 @@ const InvoiceCreator = () => {
     formData.items.reduce(
       (sum, item) =>
         sum + calculateFinalAmount(item.qty, item.unitPrice, item.discount),
-      0
+      0,
     );
 
   const handleSave = async () => {
@@ -95,96 +94,31 @@ const InvoiceCreator = () => {
 
     setLoading(true);
     try {
-      const invoiceData = {
-        userId: user.uid,
-        businessName: formData.businessName,
-        address: formData.address,
-        contactEmail: formData.contactEmail,
-        contactNumber: formData.contactNumber,
-        date: formData.date,
-        invoiceNumber: formData.invoiceNumber || "",
-        brandColor: formData.brandColor,
-        clientName: formData.clientName,
-        clientContact: formData.clientContact,
-        clientLocation: formData.clientLocation,
-        clientOccupation: formData.clientOccupation,
-        items: formData.items.filter(
-          (i) => i.description && i.qty && i.unitPrice
-        ),
-        signatureName: formData.signatureName,
-        signatoryPosition: formData.signatoryPosition,
-        dueDate: formData.dueDate || "",
-        accountName: formData.accountName || "",
-        accountNumber: formData.accountNumber || "",
-        bankName: formData.bankName || "",
-        total: calculateTotal().toFixed(2),
-        createdAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, COLLECTION_NAME), invoiceData);
-      toast.success("Invoice saved successfully!");
-
-      // Reset form
-      setFormData({
+      await api.post("/invoices", {
         ...formData,
-        businessName: "",
-        address: "",
-        contactEmail: "",
-        contactNumber: "",
-        invoiceNumber: "",
-        clientName: "",
-        clientContact: "",
-        clientLocation: "",
-        clientOccupation: "",
-        items: Array(10).fill({
-          description: "",
-          qty: "",
-          unitPrice: "",
-          discount: "",
-        }),
-        signatureName: "",
-        signatoryPosition: "",
-        dueDate: "",
-        accountName: "",
-        accountNumber: "",
-        bankName: "",
+        items: formData.items.filter(
+          (i) => i.description && i.qty && i.unitPrice,
+        ),
+        total: calculateTotal().toFixed(2),
       });
 
-      // Refresh limit count
+      toast.success("Invoice saved successfully!");
+      handleReset();
+
       if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
-    } catch (error) {
-      console.error("Error saving invoice:", error);
-      toast.error("Failed to save invoice — upgrade required?");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error(err.response?.data?.error || "Failed to save invoice");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
-    setFormData({
-      ...formData,
-      businessName: "",
-      address: "",
-      contactEmail: "",
-      contactNumber: "",
-      invoiceNumber: "",
-      clientName: "",
-      clientContact: "",
-      clientLocation: "",
-      clientOccupation: "",
-      items: Array(10).fill({
-        description: "",
-        qty: "",
-        unitPrice: "",
-        discount: "",
-      }),
-      signatureName: "",
-      signatoryPosition: "",
-      dueDate: "",
-      accountName: "",
-      accountNumber: "",
-      bankName: "",
-    });
+    setFormData(defaultForm);
     toast.info("Form cleared");
   };
 
@@ -206,10 +140,8 @@ const InvoiceCreator = () => {
               onClick={handleReset}
               className="flex items-center gap-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
             >
-              <RotateCcw className="w-4 h-4" />
-              Reset
+              <RotateCcw className="w-4 h-4" /> Reset
             </button>
-
             <div className="relative group">
               <button
                 onClick={handleSave}
@@ -222,25 +154,21 @@ const InvoiceCreator = () => {
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Saving...
+                    <Loader2 className="w-5 h-5 animate-spin" /> Saving...
                   </>
                 ) : limitStatus.reached && !isPaid ? (
                   <>
-                    <LockIcon className="w-5 h-5" />
-                    Upgrade to Continue
+                    <LockIcon className="w-5 h-5" /> Upgrade to Continue
                   </>
                 ) : (
                   <>
-                    <Save className="w-5 h-5" />
-                    Save Invoice
+                    <Save className="w-5 h-5" /> Save Invoice
                   </>
                 )}
               </button>
               {limitStatus.reached && !isPaid && (
                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-orange-400 text-white text-xs px-3 py-2 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10">
-                  You've reached 10 free invoice creations. Upgrade for
-                  unlimited!
+                  You've reached 10 free invoices. Upgrade for unlimited!
                 </div>
               )}
             </div>
@@ -248,7 +176,7 @@ const InvoiceCreator = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Form */}
+          {/* ── Form ─────────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
             <h2 className="text-xl font-semibold text-gray-900">
               Invoice Details
@@ -350,6 +278,7 @@ const InvoiceCreator = () => {
               />
             </div>
 
+            {/* Client Info */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Client Information
@@ -392,6 +321,7 @@ const InvoiceCreator = () => {
               </div>
             </div>
 
+            {/* Line Items */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Line Items
@@ -445,6 +375,7 @@ const InvoiceCreator = () => {
               </div>
             </div>
 
+            {/* Payment Terms */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Payment Terms (Optional)
@@ -463,38 +394,38 @@ const InvoiceCreator = () => {
               </div>
             </div>
 
+            {/* Bank Details */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Bank Details (Optional)
               </h3>
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  name="accountName"
-                  placeholder="Account Name"
-                  value={formData.accountName}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                />
-                <input
-                  type="text"
-                  name="accountNumber"
-                  placeholder="Account Number"
-                  value={formData.accountNumber}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                />
-                <input
-                  type="text"
-                  name="bankName"
-                  placeholder="Bank Name"
-                  value={formData.bankName}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                />
-              </div>
+              <input
+                type="text"
+                name="accountName"
+                placeholder="Account Name"
+                value={formData.accountName}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+              />
+              <input
+                type="text"
+                name="accountNumber"
+                placeholder="Account Number"
+                value={formData.accountNumber}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+              />
+              <input
+                type="text"
+                name="bankName"
+                placeholder="Bank Name"
+                value={formData.bankName}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+              />
             </div>
 
+            {/* Signatory */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Signatory
@@ -520,7 +451,7 @@ const InvoiceCreator = () => {
             </div>
           </div>
 
-          {/* Preview */}
+          {/* ── Preview ───────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Preview
@@ -740,20 +671,11 @@ const InvoiceCreator = () => {
             <p className="text-gray-600 mb-8">
               Upgrade to Pro for <strong>unlimited</strong> invoices.
             </p>
-            <div className="space-y-3 mb-8 bg-gray-50 p-4 rounded-lg">
-              <div className="text-lg">Monthly — ₦5,000</div>
-              <div className="text-xl font-bold text-green-600">
-                Yearly — ₦50,000{" "}
-                <span className="text-sm font-normal text-gray-500">
-                  (Save 17%)
-                </span>
-              </div>
-            </div>
             <button
               onClick={() => (window.location.href = "/subscribe")}
               className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-semibold hover:bg-[#4238a6] transition"
             >
-              Subscribe Now (Bank Transfer)
+              Subscribe Now
             </button>
             <button
               onClick={() => setShowLimitModal(false)}

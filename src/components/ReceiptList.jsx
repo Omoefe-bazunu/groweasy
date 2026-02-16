@@ -1,16 +1,6 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
-import { useSubscription } from "../context/SubscriptionContext"; // Added Context
-import { db } from "../lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
+import { useSubscription } from "../context/SubscriptionContext";
 import {
   Search,
   Calendar,
@@ -18,15 +8,18 @@ import {
   Plus,
   Download,
   Trash2,
-  Lock, // Added Lock Icon
+  Lock,
+  Loader2,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import api from "../lib/api";
 
 const ReceiptsList = () => {
   const { user } = useUser();
-  const { isPaid } = useSubscription(); // Get subscription status
+  const { isPaid } = useSubscription();
+
   const [receipts, setReceipts] = useState([]);
   const [filteredReceipts, setFilteredReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,35 +27,25 @@ const ReceiptsList = () => {
   const [searchDate, setSearchDate] = useState("");
   const [downloading, setDownloading] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [showLimitModal, setShowLimitModal] = useState(false); // Modal State
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   useEffect(() => {
     fetchReceipts();
   }, [user]);
-
   useEffect(() => {
     filterReceipts();
   }, [searchText, searchDate, receipts]);
 
+  // ✅ Fetch from backend
   const fetchReceipts = async () => {
     if (!user) return;
-
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "receipts"),
-        where("userId", "==", user.uid),
-        orderBy("createdAt", "desc"),
-      );
-      const querySnapshot = await getDocs(q);
-      const receiptsData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setReceipts(receiptsData);
-      setFilteredReceipts(receiptsData);
-    } catch (error) {
-      console.error("Error fetching receipts:", error);
+      const res = await api.get("/receipts");
+      setReceipts(res.data.receipts);
+      setFilteredReceipts(res.data.receipts);
+    } catch (err) {
+      console.error("Error fetching receipts:", err);
       toast.error("Failed to load receipts");
     } finally {
       setLoading(false);
@@ -71,108 +54,79 @@ const ReceiptsList = () => {
 
   const filterReceipts = () => {
     let filtered = [...receipts];
-
     if (searchText) {
       filtered = filtered.filter(
-        (receipt) =>
-          receipt.businessName
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          receipt.address?.toLowerCase().includes(searchText.toLowerCase()) ||
-          receipt.clientName
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          receipt.items?.some((item) =>
+        (r) =>
+          r.businessName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          r.address?.toLowerCase().includes(searchText.toLowerCase()) ||
+          r.clientName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          r.paymentMethod?.toLowerCase().includes(searchText.toLowerCase()) ||
+          r.signatureName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          r.items?.some((item) =>
             item.details?.toLowerCase().includes(searchText.toLowerCase()),
-          ) ||
-          receipt.paymentMethod
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          receipt.signatureName
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()),
+          ),
       );
     }
-
     if (searchDate) {
-      filtered = filtered.filter((receipt) => receipt.date === searchDate);
+      filtered = filtered.filter((r) => r.date === searchDate);
     }
-
     setFilteredReceipts(filtered);
   };
 
-  const calculateTotal = (items) => {
-    if (!items) return "0.00";
-    return items
-      .reduce((sum, item) => {
-        const qty = parseFloat(item.qty) || 0;
-        const price = parseFloat(item.unitPrice) || 0;
-        const discount = parseFloat(item.discount) || 0;
-        return sum + qty * price - discount;
-      }, 0)
-      .toFixed(2);
-  };
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const formatCurrency = (value) =>
+    parseFloat(value || 0).toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
-  const calculateBalance = (total, amountPaid) => {
-    return (parseFloat(total) - parseFloat(amountPaid || 0)).toFixed(2);
-  };
+  const calculateBalance = (total, amountPaid) =>
+    (parseFloat(total) - parseFloat(amountPaid || 0)).toFixed(2);
 
   const calculateInterestCharges = (receipt) => {
     if (!receipt.dueDate || !receipt.interestRate) return 0;
-
     const today = new Date();
     const dueDate = new Date(receipt.dueDate);
-
     if (today <= dueDate) return 0;
-
     const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
     const balance = parseFloat(
       calculateBalance(receipt.total, receipt.amountPaid),
     );
     const dailyRate = parseFloat(receipt.interestRate) / 100 / 365;
-
     return (balance * dailyRate * daysOverdue).toFixed(2);
   };
 
-  const deleteReceipt = async (receiptId) => {
-    // --- LOCK CHECK ---
+  // ✅ Delete via backend
+  const deleteReceipt = async (id) => {
     if (!isPaid) {
       setShowLimitModal(true);
       return;
     }
+    if (!window.confirm("Delete this receipt? This cannot be undone.")) return;
 
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this receipt? This action cannot be undone.",
-      )
-    ) {
-      return;
-    }
-
-    setDeleting(receiptId);
+    setDeleting(id);
     try {
-      await deleteDoc(doc(db, "receipts", receiptId));
-      setReceipts(receipts.filter((rec) => rec.id !== receiptId));
-      setFilteredReceipts(
-        filteredReceipts.filter((rec) => rec.id !== receiptId),
-      );
+      await api.delete(`/receipts/${id}`);
+      setReceipts((prev) => prev.filter((r) => r.id !== id));
       toast.success("Receipt deleted successfully!");
-    } catch (error) {
-      console.error("Error deleting receipt:", error);
-      toast.error("Failed to delete receipt");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error("Failed to delete receipt");
+      }
     } finally {
       setDeleting(null);
     }
   };
 
+  // ── Download helpers (client-side only, unchanged) ────────────────────────
   const downloadAsImage = async (receipt) => {
     setDownloading(receipt.id);
     try {
-      const receiptHTML = generateReceiptHTML(receipt);
       const tempDiv = document.createElement("div");
-      tempDiv.innerHTML = receiptHTML;
-      tempDiv.style.position = "absolute";
-      tempDiv.style.left = "-9999px";
+      tempDiv.innerHTML = generateReceiptHTML(receipt);
+      tempDiv.style.cssText = "position:absolute;left:-9999px;";
       document.body.appendChild(tempDiv);
 
       const canvas = await html2canvas(tempDiv, {
@@ -185,11 +139,9 @@ const ReceiptsList = () => {
       link.href = canvas.toDataURL("image/png");
       link.download = `receipt_${receipt.date}_${receipt.businessName}.png`;
       link.click();
-
       document.body.removeChild(tempDiv);
-      toast.success("Receipt downloaded as image!");
-    } catch (error) {
-      console.error("Error downloading image:", error);
+      toast.success("Downloaded as image!");
+    } catch {
       toast.error("Failed to download image");
     } finally {
       setDownloading(null);
@@ -199,11 +151,9 @@ const ReceiptsList = () => {
   const downloadAsPDF = async (receipt) => {
     setDownloading(receipt.id);
     try {
-      const receiptHTML = generateReceiptHTML(receipt);
       const tempDiv = document.createElement("div");
-      tempDiv.innerHTML = receiptHTML;
-      tempDiv.style.position = "absolute";
-      tempDiv.style.left = "-9999px";
+      tempDiv.innerHTML = generateReceiptHTML(receipt);
+      tempDiv.style.cssText = "position:absolute;left:-9999px;";
       document.body.appendChild(tempDiv);
 
       const canvas = await html2canvas(tempDiv, {
@@ -213,282 +163,117 @@ const ReceiptsList = () => {
         logging: false,
       });
       const imgData = canvas.toDataURL("image/png");
-
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(
+        imgData,
+        "PNG",
+        0,
+        0,
+        imgWidth,
+        (canvas.height * imgWidth) / canvas.width,
+      );
       pdf.save(`receipt_${receipt.date}_${receipt.businessName}.pdf`);
-
       document.body.removeChild(tempDiv);
-      toast.success("Receipt downloaded as PDF!");
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
+      toast.success("Downloaded as PDF!");
+    } catch {
       toast.error("Failed to download PDF");
     } finally {
       setDownloading(null);
     }
   };
 
-  const generateReceiptHTML = (receipt) => {
-    return `
-      <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid ${
-          receipt.brandColor || "#000"
-        }; padding-bottom: 16px;">
-          <div style="flex: 1;">
-            ${
-              receipt.businessLogo
-                ? `<img src="${receipt.businessLogo}" alt="Logo" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 8px;" />`
-                : ""
-            }
-            <h1 style="font-size: 24px; font-weight: bold; color: ${
-              receipt.brandColor || "#000"
-            }; margin: 0;">
-              ${receipt.businessName || "Business Name"}
-            </h1>
-            <p style="font-size: 14px; color: #666; margin: 4px 0;">
-              ${receipt.address || "Address"}
-            </p>
-            ${
-              receipt.contactEmail
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${receipt.contactEmail}</p>`
-                : ""
-            }
-            ${
-              receipt.contactNumber
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${receipt.contactNumber}</p>`
-                : ""
-            }
-          </div>
-          <div style="text-align: right;">
-            <h2 style="font-size: 20px; font-weight: bold; color: ${
-              receipt.brandColor || "#000"
-            }; margin: 0;">RECEIPT</h2>
-            <p style="font-size: 14px; color: #666; margin: 4px 0;">Date: ${
-              receipt.date
-            }</p>
-          </div>
+  const generateReceiptHTML = (receipt) => `
+    <div style="width:800px;padding:40px;font-family:Arial,sans-serif;background:white;color:black;">
+      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:24px;border-bottom:3px solid ${receipt.brandColor || "#000"};padding-bottom:16px;">
+        <div style="flex:1;">
+          <h1 style="font-size:24px;font-weight:bold;color:${receipt.brandColor || "#000"};margin:0;">${receipt.businessName || "Business Name"}</h1>
+          <p style="font-size:14px;color:#666;margin:4px 0;">${receipt.address || "Address"}</p>
+          ${receipt.contactEmail ? `<p style="font-size:14px;color:#666;margin:4px 0;">${receipt.contactEmail}</p>` : ""}
+          ${receipt.contactNumber ? `<p style="font-size:14px;color:#666;margin:4px 0;">${receipt.contactNumber}</p>` : ""}
         </div>
-
-        ${
-          receipt.clientName ||
-          receipt.clientContact ||
-          receipt.clientLocation ||
-          receipt.clientOccupation
-            ? `
-          <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
-            <h3 style="font-size: 14px; font-weight: bold; color: #333; margin: 0 0 8px 0;">CLIENT INFORMATION</h3>
-            ${
-              receipt.clientName
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 600;">Name:</span> ${receipt.clientName}</p>`
-                : ""
-            }
-            ${
-              receipt.clientContact
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 600;">Contact:</span> ${receipt.clientContact}</p>`
-                : ""
-            }
-            ${
-              receipt.clientLocation
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 600;">Location:</span> ${receipt.clientLocation}</p>`
-                : ""
-            }
-            ${
-              receipt.clientOccupation
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 600;">Occupation:</span> ${receipt.clientOccupation}</p>`
-                : ""
-            }
-          </div>
-        `
-            : ""
-        }
-
-        <table style="width: 100%; font-size: 14px; margin-bottom: 16px; border-collapse: collapse;">
-          <thead>
-            <tr style="background-color: ${
-              receipt.brandColor || "#000"
-            }; color: white;">
-              <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Details</th>
-              <th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Qty</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Unit Price</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Amount</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Discount</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Final</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${receipt.items
-              ?.map(
-                (item) => `
-              <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">${
-                  item.details || "-"
-                }</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${
-                  item.qty || "-"
-                }</td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${
-                    item.unitPrice
-                      ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${
-                    item.qty && item.unitPrice
-                      ? `₦${(
-                          parseFloat(item.qty) * parseFloat(item.unitPrice)
-                        ).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${
-                    item.discount
-                      ? `₦${parseFloat(item.discount).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-                <td style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">
-                  ${
-                    item.qty && item.unitPrice
-                      ? `₦${(
-                          parseFloat(item.qty) * parseFloat(item.unitPrice) -
-                          (parseFloat(item.discount) || 0)
-                        ).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-              </tr>
-            `,
-              )
-              .join("")}
-          </tbody>
-          <tfoot>
-            <tr style="background-color: #f5f5f5;">
-              <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total:</td>
-              <td style="padding: 8px; text-align: right; font-weight: bold; color: ${
-                receipt.brandColor || "#000"
-              }; border: 1px solid #ddd;">₦${parseFloat(
-                receipt.total,
-              ).toLocaleString("en-NG", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}</td>
-            </tr>
-            <tr>
-              <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Amount Paid:</td>
-              <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">
-                ₦${parseFloat(receipt.amountPaid || "0.00").toLocaleString(
-                  "en-NG",
-                  { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                )}
-                ${
-                  receipt.paymentMethod
-                    ? `<span style="display: block; font-size: 12px; color: #666;">(${receipt.paymentMethod})</span>`
-                    : ""
-                }
-              </td>
-            </tr>
-            <tr style="background-color: #f5f5f5;">
-              <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Balance Outstanding:</td>
-              <td style="padding: 8px; text-align: right; font-weight: bold; color: ${
-                receipt.brandColor || "#000"
-              }; border: 1px solid #ddd;">₦${parseFloat(
-                calculateBalance(receipt.total, receipt.amountPaid),
-              ).toLocaleString("en-NG", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}</td>
-            </tr>
-            ${
-              receipt.dueDate
-                ? `
-              <tr>
-                <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Due Date:</td>
-                <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">${receipt.dueDate}</td>
-              </tr>
-            `
-                : ""
-            }
-            ${
-              receipt.interestRate
-                ? `
-              <tr>
-                <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Interest Rate:</td>
-                <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">${receipt.interestRate}%</td>
-              </tr>
-            `
-                : ""
-            }
-            ${
-              receipt.interestRate && calculateInterestCharges(receipt) > 0
-                ? `
-              <tr>
-                <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Interest Charges:</td>
-                <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">₦${parseFloat(
-                  calculateInterestCharges(receipt),
-                ).toLocaleString("en-NG", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}</td>
-              </tr>
-            `
-                : ""
-            }
-          </tfoot>
-        </table>
-
-        ${
-          receipt.signatureName || receipt.signatoryPosition
-            ? `
-          <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #ddd;">
-            ${
-              receipt.signature
-                ? `<img src="${receipt.signature}" alt="Signature" style="width: 128px; height: 64px; object-fit: contain; margin-bottom: 8px;" />`
-                : ""
-            }
-            <p style="font-size: 14px; font-weight: 600; margin: 0;">${
-              receipt.signatureName || ""
-            }</p>
-            <p style="font-size: 12px; color: #666; margin: 4px 0;">${
-              receipt.signatoryPosition || ""
-            }</p>
-          </div>
-        `
-            : ""
-        }
+        <div style="text-align:right;">
+          <h2 style="font-size:20px;font-weight:bold;color:${receipt.brandColor || "#000"};margin:0;">RECEIPT</h2>
+          <p style="font-size:14px;color:#666;margin:4px 0;">Date: ${receipt.date}</p>
+        </div>
       </div>
-    `;
-  };
+      ${
+        receipt.clientName ||
+        receipt.clientContact ||
+        receipt.clientLocation ||
+        receipt.clientOccupation
+          ? `
+        <div style="margin-bottom:24px;padding:16px;background-color:#f5f5f5;border-radius:8px;">
+          <h3 style="font-size:14px;font-weight:bold;color:#333;margin:0 0 8px 0;">CLIENT INFORMATION</h3>
+          ${receipt.clientName ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:600;">Name:</span> ${receipt.clientName}</p>` : ""}
+          ${receipt.clientContact ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:600;">Contact:</span> ${receipt.clientContact}</p>` : ""}
+          ${receipt.clientLocation ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:600;">Location:</span> ${receipt.clientLocation}</p>` : ""}
+          ${receipt.clientOccupation ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:600;">Occupation:</span> ${receipt.clientOccupation}</p>` : ""}
+        </div>`
+          : ""
+      }
+      <table style="width:100%;font-size:14px;margin-bottom:16px;border-collapse:collapse;">
+        <thead>
+          <tr style="background-color:${receipt.brandColor || "#000"};color:white;">
+            <th style="padding:8px;text-align:left;border:1px solid #ddd;">Details</th>
+            <th style="padding:8px;text-align:center;border:1px solid #ddd;">Qty</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Unit Price</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Amount</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Discount</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Final</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(receipt.items || [])
+            .map(
+              (item) => `
+            <tr style="border-bottom:1px solid #ddd;">
+              <td style="padding:8px;text-align:left;border:1px solid #ddd;">${item.details || "-"}</td>
+              <td style="padding:8px;text-align:center;border:1px solid #ddd;">${item.qty || "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.unitPrice ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.discount ? `₦${parseFloat(item.discount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+              <td style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+            </tr>`,
+            )
+            .join("")}
+        </tbody>
+        <tfoot>
+          <tr style="background-color:#f5f5f5;">
+            <td colspan="5" style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">Total:</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;color:${receipt.brandColor || "#000"};border:1px solid #ddd;">₦${parseFloat(receipt.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+          <tr>
+            <td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Amount Paid:</td>
+            <td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">₦${parseFloat(receipt.amountPaid || "0").toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${receipt.paymentMethod ? `<span style="display:block;font-size:12px;color:#666;">(${receipt.paymentMethod})</span>` : ""}</td>
+          </tr>
+          <tr style="background-color:#f5f5f5;">
+            <td colspan="5" style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">Balance Outstanding:</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;color:${receipt.brandColor || "#000"};border:1px solid #ddd;">₦${parseFloat(calculateBalance(receipt.total, receipt.amountPaid)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+          ${receipt.dueDate ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Due Date:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">${receipt.dueDate}</td></tr>` : ""}
+          ${receipt.interestRate ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Interest Rate:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">${receipt.interestRate}%</td></tr>` : ""}
+          ${receipt.interestRate && calculateInterestCharges(receipt) > 0 ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Interest Charges:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">₦${parseFloat(calculateInterestCharges(receipt)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>` : ""}
+        </tfoot>
+      </table>
+      ${
+        receipt.signatureName || receipt.signatoryPosition
+          ? `
+        <div style="margin-top:32px;padding-top:24px;border-top:1px solid #ddd;">
+          <p style="font-size:14px;font-weight:600;margin:0;">${receipt.signatureName || ""}</p>
+          <p style="font-size:12px;color:#666;margin:4px 0;">${receipt.signatoryPosition || ""}</p>
+        </div>`
+          : ""
+      }
+    </div>`;
 
   if (loading) {
     return (
-      <section
-        id="blog-details-loading"
-        className="flex flex-col items-center justify-center min-h-screen bg-white py-20"
-      >
-        <div className="flex flex-col items-center justify-center">
-          <div className="flex space-x-2">
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse"></span>
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-200"></span>
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-400"></span>
-          </div>
+      <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
+        <div className="flex space-x-2">
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-200" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-400" />
         </div>
       </section>
     );
@@ -505,39 +290,38 @@ const ReceiptsList = () => {
           </div>
           <button
             onClick={() => (window.location.href = "/receipts")}
-            className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
+            className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-[#4238a6] transition-colors"
           >
-            <Plus className="w-5 h-5" />
-            Create Receipt
+            <Plus className="w-5 h-5" /> Create Receipt
           </button>
         </div>
 
-        {/* Search and Filter */}
+        {/* Search */}
         <div className="bg-white rounded-xl shadow-md p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search by business name, client, address, items, payment method, or signatory..."
+                placeholder="Search by business name, client, items..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
               />
             </div>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="date"
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
               />
             </div>
           </div>
         </div>
 
-        {/* Receipts Grid */}
+        {/* Grid */}
         {filteredReceipts.length === 0 ? (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
             <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -552,7 +336,7 @@ const ReceiptsList = () => {
             {!searchText && !searchDate && (
               <button
                 onClick={() => (window.location.href = "/receipts")}
-                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
+                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-[#4238a6] transition-colors"
               >
                 Create Your First Receipt
               </button>
@@ -569,13 +353,6 @@ const ReceiptsList = () => {
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      {receipt.businessLogo && (
-                        <img
-                          src={receipt.businessLogo}
-                          alt="Logo"
-                          className="w-12 h-12 object-contain mb-2"
-                        />
-                      )}
                       <h3 className="text-lg font-semibold text-gray-900 truncate">
                         {receipt.businessName}
                       </h3>
@@ -597,8 +374,7 @@ const ReceiptsList = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">
-                        {receipt.items?.filter((item) => item.details).length ||
-                          0}{" "}
+                        {receipt.items?.filter((i) => i.details).length || 0}{" "}
                         item(s)
                       </span>
                       <span
@@ -626,7 +402,7 @@ const ReceiptsList = () => {
                     </div>
                     {receipt.paymentMethod && (
                       <div className="text-sm">
-                        <span className="text-gray-600">Payment Method: </span>
+                        <span className="text-gray-600">Payment: </span>
                         <span className="font-semibold">
                           {receipt.paymentMethod}
                         </span>
@@ -640,7 +416,7 @@ const ReceiptsList = () => {
                     )}
                     {receipt.interestRate && (
                       <div className="text-sm">
-                        <span className="text-gray-600">Interest Rate: </span>
+                        <span className="text-gray-600">Interest: </span>
                         <span className="font-semibold">
                           {receipt.interestRate}%
                         </span>
@@ -676,7 +452,9 @@ const ReceiptsList = () => {
                   <div className="pt-4 border-t border-gray-200 flex gap-2">
                     <button
                       onClick={() => downloadAsImage(receipt)}
-                      disabled={downloading === receipt.id}
+                      disabled={
+                        downloading === receipt.id || deleting === receipt.id
+                      }
                       className="flex-1 flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
@@ -684,13 +462,14 @@ const ReceiptsList = () => {
                     </button>
                     <button
                       onClick={() => downloadAsPDF(receipt)}
-                      disabled={downloading === receipt.id}
-                      className="flex-1 flex items-center justify-center gap-1 bg-[#5247bf] hover:bg-blue-900 text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
+                      disabled={
+                        downloading === receipt.id || deleting === receipt.id
+                      }
+                      className="flex-1 flex items-center justify-center gap-1 bg-[#5247bf] hover:bg-[#4238a6] text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
                       {downloading === receipt.id ? "..." : "PDF"}
                     </button>
-                    {/* Updated Delete Button */}
                     <button
                       onClick={() => deleteReceipt(receipt.id)}
                       disabled={
@@ -703,14 +482,15 @@ const ReceiptsList = () => {
                           ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                           : "bg-red-100 hover:bg-red-200 text-red-700"
                       } disabled:opacity-70`}
-                      title={!isPaid ? "Upgrade to delete items" : "Delete"}
+                      title={!isPaid ? "Upgrade to delete" : "Delete"}
                     >
-                      {!isPaid ? (
+                      {deleting === receipt.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : !isPaid ? (
                         <Lock className="w-4 h-4" />
                       ) : (
                         <Trash2 className="w-4 h-4" />
                       )}
-                      {deleting === receipt.id ? "..." : ""}
                     </button>
                   </div>
                 </div>
@@ -719,7 +499,6 @@ const ReceiptsList = () => {
           </div>
         )}
 
-        {/* Results count */}
         {filteredReceipts.length > 0 && (
           <div className="mt-6 text-center text-gray-600">
             Showing {filteredReceipts.length} of {receipts.length} receipt(s)

@@ -8,6 +8,7 @@ import {
   User2Icon,
   ArrowRight,
   Star,
+  CalendarCheck2,
 } from "lucide-react";
 
 const ContentCreationBoard = () => {
@@ -54,6 +55,15 @@ const ContentCreationBoard = () => {
       action: () => navigate("/financial-records"),
       color: "bg-indigo-50",
     },
+    {
+      id: "budgets",
+      title: "Budgets",
+      icon: <CalendarCheck2 className="w-6 h-6" />,
+      description: "Create and manage budgets for your business.",
+      action: () => navigate("/budgets"),
+      color: "bg-red-50",
+    },
+
     {
       id: "tax-calculator",
       title: "Tax Calculator",

@@ -1,23 +1,23 @@
 import { useState } from "react";
-import { FileText, BarChart3 } from "lucide-react";
-import TaskPlanner from "../../components/TaskPlanner";
-import TaskAnalytics from "../../components/TaskAnalytics";
+import { LayoutList, PlusCircle } from "lucide-react";
+import BudgetList from "../../components/BudgetList";
+import BudgetCreator from "../../components/BudgetCreator";
 
-const Tasks = () => {
-  const [activeTab, setActiveTab] = useState("tasks");
+const Budgets = () => {
+  const [activeTab, setActiveTab] = useState("list");
 
   const tabs = [
     {
-      id: "tasks",
-      label: "Tasks",
-      icon: FileText,
-      component: TaskPlanner,
+      id: "list",
+      label: "My Budgets",
+      icon: LayoutList,
+      component: BudgetList,
     },
     {
-      id: "task",
-      label: "Task Analytics",
-      icon: BarChart3,
-      component: TaskAnalytics,
+      id: "create",
+      label: "Create Budget",
+      icon: PlusCircle,
+      component: BudgetCreator,
     },
   ];
 
@@ -37,7 +37,7 @@ const Tasks = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 py-4 cursor-pointer px-2 border-b-4 transition-colors ${
+                  className={`flex items-center gap-2 py-4 px-2 border-b-2 transition-colors ${
                     isActive
                       ? "border-[#5247bf] text-[#5247bf]"
                       : "border-transparent text-gray-600 hover:text-gray-900"
@@ -54,10 +54,12 @@ const Tasks = () => {
 
       {/* Tab Content */}
       <div className="transition-all duration-300">
-        {ActiveComponent && <ActiveComponent />}
+        {ActiveComponent && (
+          <ActiveComponent onSaved={() => setActiveTab("list")} />
+        )}
       </div>
     </div>
   );
 };
 
-export default Tasks;
+export default Budgets;

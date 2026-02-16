@@ -36,6 +36,7 @@ import CustomerManager from "./Pages/BusinessTools/CustomerManager";
 import NigeriaTaxCalculator from "./Pages/BusinessTools/TaxCalculator";
 import CustomerSatisfaction from "./Pages/CustomerSatisfaction";
 import PublicRate from "./Pages/PublicRate";
+import Budgets from "./Pages/BusinessTools/Budgets";
 
 // Subscription & Admin
 import Subscribe from "./Pages/Subscribe";
@@ -102,6 +103,7 @@ const App = () => {
           <Route path="/inventory" element={<InventoryManager />} />
           <Route path="/customers" element={<CustomerManager />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/budgets" element={<Budgets />} />
 
           {/* Subscription */}
           <Route path="/subscribe" element={<Subscribe />} />

@@ -3,12 +3,11 @@ import { UserPlus, Save, Lock, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useUser } from "../context/UserContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { db } from "../lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import api from "../lib/api";
 
 const COLLECTION_NAME = "customers";
 
-const CustomerForm = ({ switchToTab }) => {
+const CustomerForm = ({ switchToTab, onCustomerAdded }) => {
   const { user } = useUser();
   const { canWriteTo, getLimitStatus, isPaid } = useSubscription();
 
@@ -20,14 +19,16 @@ const CustomerForm = ({ switchToTab }) => {
     limit: 10,
   });
 
-  const [formData, setFormData] = useState({
+  const defaultForm = {
     name: "",
     email: "",
     phone: "",
-    state: "", // For Analytics
-    country: "Nigeria", // Default
-    productInterest: "", // For Analytics (e.g., "Web Dev")
-  });
+    state: "",
+    country: "Nigeria",
+    productInterest: "",
+  };
+
+  const [formData, setFormData] = useState(defaultForm);
 
   useEffect(() => {
     if (user && !isPaid) {
@@ -53,27 +54,28 @@ const CustomerForm = ({ switchToTab }) => {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, COLLECTION_NAME), {
-        userId: user.uid,
-        ...formData,
-        createdAt: serverTimestamp(),
-      });
+      const res = await api.post("/customers", formData);
 
       toast.success("Customer added successfully!");
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        state: "",
-        country: "Nigeria",
-        productInterest: "",
-      });
 
+      // Notify parent list to prepend new customer
+      if (onCustomerAdded) {
+        onCustomerAdded({
+          id: res.data.id,
+          ...formData,
+          userId: user.uid,
+        });
+      }
+
+      setFormData(defaultForm);
       if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
       switchToTab("list");
-    } catch (error) {
-      console.error("Error adding customer:", error);
-      toast.error("Failed to save customer");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error(err.response?.data?.error || "Failed to save customer");
+      }
     } finally {
       setLoading(false);
     }

@@ -25,7 +25,7 @@ import {
 
 const UserProfile = () => {
   const { user, userData, logout } = useUser();
-  const { isPaid, subscription, daysRemaining } = useSubscription();
+  const { isPaid, daysRemaining, planLabel, planType } = useSubscription();
   const navigate = useNavigate();
 
   const [counts, setCounts] = useState({
@@ -49,7 +49,7 @@ const UserProfile = () => {
 
     const fetchCounts = async () => {
       try {
-        const collections = [
+        const cols = [
           "receipts",
           "invoices",
           "financialRecords",
@@ -60,14 +60,14 @@ const UserProfile = () => {
         ];
 
         const results = await Promise.all(
-          collections.map(async (col) => {
+          cols.map(async (col) => {
             const q = query(
               collection(db, col),
-              where("userId", "==", user.uid)
+              where("userId", "==", user.uid),
             );
             const snapshot = await getCountFromServer(q);
             return { [col]: snapshot.data().count };
-          })
+          }),
         );
 
         setCounts(Object.assign({}, ...results));
@@ -85,18 +85,20 @@ const UserProfile = () => {
     return (
       <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
         <div className="flex space-x-2">
-          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse"></span>
-          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-200"></span>
-          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-400"></span>
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-200" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-400" />
         </div>
       </section>
     );
   }
 
+  const totalDocs = Object.values(counts).reduce((a, b) => a + b, 0);
+
   return (
     <div className="min-h-screen bg-gray-50/50 pb-32 pt-8 px-4 md:px-12">
       <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
+        {/* ── Header ───────────────────────────────────────────────────── */}
         <div className="bg-[#5247bf] rounded-2xl p-8 mb-10 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="text-center md:text-left">
             <h1 className="text-3xl md:text-4xl font-black text-white">
@@ -111,11 +113,11 @@ const UserProfile = () => {
             className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 hover:bg-red-500 hover:text-white rounded-xl transition-all font-bold"
           >
             <LogOut className="w-5 h-5" />
-            <span>Logout</span>
+            Logout
           </button>
         </div>
 
-        {/* Main Grid: User Info & Subscription */}
+        {/* ── User Info + Subscription ──────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           {/* User Info Card */}
           <div className="lg:col-span-1 bg-white rounded-3xl shadow-lg p-8 border border-gray-100 flex flex-col items-center text-center">
@@ -142,6 +144,8 @@ const UserProfile = () => {
                   Your current plan and billing cycle
                 </p>
               </div>
+
+              {/* ✅ Status badge — reads isPaid, no subscription?.type */}
               <div
                 className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-black shadow-sm ${
                   isPaid
@@ -154,12 +158,13 @@ const UserProfile = () => {
                 ) : (
                   <Clock className="w-5 h-5" />
                 )}
-                {isPaid ? "PRO ACTIVE" : "FREE PLAN"}
+                {isPaid ? "PRO ACTIVE" : planLabel.toUpperCase()}
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
               <div className="space-y-4">
+                {/* Plan Type — ✅ uses planType from context, not subscription?.type */}
                 <div className="flex items-center gap-3">
                   <div className="bg-gray-50 p-3 rounded-xl">
                     <Crown className="w-5 h-5 text-[#5247bf]" />
@@ -170,11 +175,13 @@ const UserProfile = () => {
                     </p>
                     <p className="text-gray-900 font-bold">
                       {isPaid
-                        ? `${subscription?.type === "yearly" ? "Yearly" : "Monthly"} Pro`
-                        : "Basic Tier"}
+                        ? `${planType === "yearly" ? "Yearly" : "Monthly"} Pro`
+                        : planLabel}
                     </p>
                   </div>
                 </div>
+
+                {/* Renewal — only shown when paid */}
                 {isPaid && (
                   <div className="flex items-center gap-3">
                     <div className="bg-gray-50 p-3 rounded-xl">
@@ -216,7 +223,7 @@ const UserProfile = () => {
           </div>
         </div>
 
-        {/* Statistics Grid: Responsive Columns */}
+        {/* ── Account Statistics ────────────────────────────────────────── */}
         <h3 className="text-2xl font-black text-gray-900 mb-6 px-2">
           Account Statistics
         </h3>
@@ -253,18 +260,18 @@ const UserProfile = () => {
           ))}
         </div>
 
-        {/* Free Plan Limits Bar */}
+        {/* ── Free Plan Upgrade Banner ──────────────────────────────────── */}
         {!isPaid && (
           <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-3xl p-10 text-center">
             <h2 className="text-2xl font-black text-gray-800 mb-2">
               Maximize Your Growth
             </h2>
             <p className="text-gray-600 mb-8 max-w-xl mx-auto">
-              You are currently using the Free Plan. You have used{" "}
-              <span className="font-bold text-[#5247bf]">
-                {Object.values(counts).reduce((a, b) => a + b, 0)}
-              </span>{" "}
-              out of your total 60 document capacity.
+              You are currently on the{" "}
+              <span className="font-bold text-[#5247bf]">{planLabel}</span>. You
+              have used{" "}
+              <span className="font-bold text-[#5247bf]">{totalDocs}</span> out
+              of your total 70 document capacity.
             </p>
             <button
               onClick={() => navigate("/subscribe")}

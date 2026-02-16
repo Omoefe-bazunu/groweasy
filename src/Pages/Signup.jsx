@@ -1,13 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { useUser } from "../context/UserContext"; // Assuming this handles Firebase Auth only
+import { useUser } from "../context/UserContext";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
-import { auth } from "../lib/firebase"; // Import auth to get token
-
-// Production API URL - Configure this in your .env file (VITE_API_URL)
-// Fallback to localhost for local testing if env var is missing
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import api from "../lib/api";
 
 const SignUp = () => {
   const [name, setName] = useState("");
@@ -18,11 +14,12 @@ const SignUp = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { signupWithEmail } = useUser();
+  // ✅ Pull everything needed from UserContext
+  const { signupWithEmail, setUserData, isSigningUp } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 1. Capture Referral Code on Mount
+  // Capture Referral Code on Mount
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const refCode = params.get("ref");
@@ -38,7 +35,6 @@ const SignUp = () => {
       setError("Please fill in all fields");
       return;
     }
-
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
       return;
@@ -48,49 +44,38 @@ const SignUp = () => {
     setError("");
 
     try {
-      // 1. Create Auth User
+      // 1. Create Firebase auth user
+      //    isSigningUp.current = true is set inside signupWithEmail
       const newUser = await signupWithEmail(name, email, password);
 
-      // 2. Get Token
-      const token = await newUser.getIdToken();
-
-      // 3. Get Referral Code
+      // 2. Get referral code from localStorage
       const referralCode = localStorage.getItem("referralCode");
 
-      // 4. Call Backend
-      const response = await fetch(`${API_URL}/referral/complete-signup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          phoneNumber,
-          referralCode: referralCode || null,
-        }),
+      // 3. Create Firestore profile via backend
+      await api.post("/referral/complete-signup", {
+        name,
+        email,
+        phoneNumber,
+        referralCode: referralCode || null,
       });
 
-      const data = await response.json();
+      // 4. Profile now exists — safe to fetch it
+      const res = await api.get("/auth/me");
+      setUserData(res.data); // ✅ hydrate context before navigation
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to complete profile setup");
-      }
-
-      // 5. Clean up and wait for profile to be ready
       localStorage.removeItem("referralCode");
+      toast.success("Account created successfully!");
 
-      toast.success("Account created! Setting up your profile...");
+      // 5. Reset the flag now that everything is done
+      isSigningUp.current = false;
 
-      // Wait 2 seconds for Firestore listener to catch up
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 2000);
-    } catch (error) {
-      console.error("Signup Error:", error);
-      setError(error.message || "Failed to sign up");
-      toast.error(error.message || "Failed to sign up");
+      // 6. Navigate — no setTimeout needed
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Signup Error:", err);
+      isSigningUp.current = false; // always reset on error
+      setError(err.message || "Failed to sign up");
+      toast.error(err.message || "Failed to sign up");
     } finally {
       setLoading(false);
     }

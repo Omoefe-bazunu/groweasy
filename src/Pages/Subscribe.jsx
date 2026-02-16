@@ -9,12 +9,24 @@ import {
   serverTimestamp,
   doc,
   getDoc,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
-import { Check, Copy, Upload, Loader2, AlertCircle } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Upload,
+  Loader2,
+  AlertCircle,
+  Clock,
+  RefreshCw,
+} from "lucide-react";
 
 const Subscribe = () => {
   const { user, userData } = useUser();
   const { isPaid } = useSubscription();
+
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState(null);
@@ -22,8 +34,12 @@ const Subscribe = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  // State for dynamic pricing
-  const [monthlyFee, setMonthlyFee] = useState(3000); // Default fallback
+  // ── Pending payment state ─────────────────────────────────────────────────
+  const [pendingPayment, setPendingPayment] = useState(null);
+  const [checkingPending, setCheckingPending] = useState(true);
+
+  // ── Pricing state ─────────────────────────────────────────────────────────
+  const [monthlyFee, setMonthlyFee] = useState(3000);
   const [loadingPrice, setLoadingPrice] = useState(true);
   const [priceError, setPriceError] = useState("");
 
@@ -33,21 +49,45 @@ const Subscribe = () => {
     accountNumber: "3002638291",
   };
 
-  // Fetch Pricing on Mount
+  // ── Check for existing pending payment on mount ───────────────────────────
+  useEffect(() => {
+    if (!user) {
+      setCheckingPending(false);
+      return;
+    }
+
+    const checkPending = async () => {
+      try {
+        const q = query(
+          collection(db, "pendingPayments"),
+          where("userId", "==", user.uid),
+          where("status", "==", "pending"),
+        );
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const doc = snap.docs[0];
+          setPendingPayment({ id: doc.id, ...doc.data() });
+        }
+      } catch (err) {
+        console.error("Failed to check pending payment:", err);
+      } finally {
+        setCheckingPending(false);
+      }
+    };
+
+    checkPending();
+  }, [user]);
+
+  // ── Fetch pricing ─────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchPricing = async () => {
       try {
-        console.log("🔍 Fetching pricing from Firestore...");
-
-        // Try to get settings document
         const settingsRef = doc(db, "admin", "settings");
         const settingsSnap = await getDoc(settingsRef);
 
         if (settingsSnap.exists()) {
           const data = settingsSnap.data();
-          console.log("📦 Settings data:", data);
-
-          // Check for the fee in different possible field names
           const fee =
             data.monthlySubscriptionFee ||
             data.subscriptionFee ||
@@ -55,20 +95,15 @@ const Subscribe = () => {
             data.price;
 
           if (fee && !isNaN(Number(fee))) {
-            const feeNumber = Number(fee);
-            console.log("✅ Pricing loaded:", feeNumber);
-            setMonthlyFee(feeNumber);
+            setMonthlyFee(Number(fee));
             setPriceError("");
           } else {
-            console.warn("⚠️ Fee field exists but is invalid:", fee);
             setPriceError("Using default pricing (₦3,000)");
           }
         } else {
-          console.warn("⚠️ Settings document does not exist at admin/settings");
           setPriceError("Using default pricing (₦3,000)");
         }
-      } catch (error) {
-        console.error("❌ Error fetching pricing:", error);
+      } catch {
         setPriceError("Using default pricing (₦3,000)");
       } finally {
         setLoadingPrice(false);
@@ -78,7 +113,6 @@ const Subscribe = () => {
     fetchPricing();
   }, []);
 
-  // Calculate fees dynamically based on fetched state
   const plans = {
     monthly: {
       name: "Monthly",
@@ -130,21 +164,32 @@ const Subscribe = () => {
     try {
       const fileRef = ref(
         storage,
-        `payment-proofs/${user.uid}_${Date.now()}_${file.name}`
+        `payment-proofs/${user.uid}_${Date.now()}_${file.name}`,
       );
       const snapshot = await uploadBytes(fileRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
 
-      await addDoc(collection(db, "pendingPayments"), {
+      const docRef = await addDoc(collection(db, "pendingPayments"), {
         userId: user.uid,
         userEmail: user.email,
         userName: userData?.name || "User",
         plan: plan,
-        amount: plans[plan].rawAmount, // Save raw number for backend processing
-        amountDisplay: plans[plan].amount, // Human-readable version
+        amount: plans[plan].rawAmount,
+        amountDisplay: plans[plan].amount,
         paymentScreenshot: downloadURL,
         requestedAt: serverTimestamp(),
         status: "pending",
+      });
+
+      // ✅ Set pending payment state so UI switches immediately
+      setPendingPayment({
+        id: docRef.id,
+        plan,
+        amount: plans[plan].rawAmount,
+        amountDisplay: plans[plan].amount,
+        paymentScreenshot: downloadURL,
+        status: "pending",
+        requestedAt: new Date(),
       });
 
       setSuccess(true);
@@ -159,6 +204,7 @@ const Subscribe = () => {
     }
   };
 
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -167,6 +213,16 @@ const Subscribe = () => {
     );
   }
 
+  if (checkingPending || loadingPrice) {
+    return (
+      <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
+        <Loader2 className="w-8 h-8 text-[#5247bf] animate-spin mb-4" />
+        <p className="text-gray-600">Loading...</p>
+      </section>
+    );
+  }
+
+  // ── Already subscribed ────────────────────────────────────────────────────
   if (isPaid) {
     return (
       <div className="min-h-screen max-w-2xl mx-auto text-gray-700 bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-6">
@@ -185,19 +241,111 @@ const Subscribe = () => {
     );
   }
 
-  if (loadingPrice) {
+  // ── Pending payment UI ────────────────────────────────────────────────────
+  if (pendingPayment) {
+    const submittedAt = pendingPayment.requestedAt?.toDate
+      ? pendingPayment.requestedAt.toDate()
+      : pendingPayment.requestedAt instanceof Date
+        ? pendingPayment.requestedAt
+        : new Date(pendingPayment.requestedAt);
+
     return (
-      <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
-        <p className="text-gray-600">Loading pricing information...</p>
-      </section>
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-xl p-10 text-center max-w-lg w-full">
+          {/* Animated clock icon */}
+          <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Clock className="w-12 h-12 text-orange-500" />
+          </div>
+
+          <h1 className="text-3xl font-bold text-gray-900 mb-3">
+            Payment Under Review
+          </h1>
+          <p className="text-gray-500 mb-8">
+            Your payment proof has been submitted and is being reviewed by our
+            team. This usually takes a few hours.
+          </p>
+
+          {/* Payment summary card */}
+          <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-500 font-medium">Plan</span>
+              <span className="font-bold text-gray-900 capitalize">
+                {pendingPayment.plan} Pro
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-500 font-medium">Amount</span>
+              <span className="font-bold text-[#5247bf]">
+                ₦{(pendingPayment.amount || 0).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-500 font-medium">
+                Submitted
+              </span>
+              <span className="text-sm text-gray-700">
+                {submittedAt.toLocaleDateString("en-NG", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}{" "}
+                at{" "}
+                {submittedAt.toLocaleTimeString("en-NG", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-500 font-medium">Status</span>
+              <span className="inline-flex items-center gap-1.5 bg-orange-100 text-orange-700 text-xs font-bold px-3 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse" />
+                Awaiting Approval
+              </span>
+            </div>
+          </div>
+
+          {/* Payment proof link */}
+          {pendingPayment.paymentScreenshot && (
+            <a
+              href={pendingPayment.paymentScreenshot}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-[#5247bf] hover:underline text-sm font-medium mb-8"
+            >
+              View your submitted proof ↗
+            </a>
+          )}
+
+          {/* What happens next */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-left mb-6">
+            <p className="text-sm font-bold text-blue-800 mb-2">
+              What happens next?
+            </p>
+            <ul className="text-sm text-blue-700 space-y-1.5">
+              <li>✓ Our team reviews your payment screenshot</li>
+              <li>✓ Your account is upgraded within a few hours</li>
+              <li>✓ You'll get full access immediately after approval</li>
+            </ul>
+          </div>
+
+          {/* Refresh hint */}
+          <button
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 mx-auto transition"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Already approved? Refresh to check
+          </button>
+        </div>
+      </div>
     );
   }
 
+  // ── Default subscribe UI ──────────────────────────────────────────────────
   return (
     <div className="min-h-screen text-gray-700 bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 pb-25 pt-6 px-6">
       <div className="max-w-4xl mx-auto">
-        {/* Price Error Alert */}
         {priceError && (
           <div className="mb-6 max-w-2xl mx-auto bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -257,71 +405,56 @@ const Subscribe = () => {
                 </span>
               </div>
               <ul className="space-y-3 text-gray-700">
-                <li className="flex items-center gap-3">
-                  <Check className="w-5 h-5 text-green-600" />
-                  Unlimited Receipts & Invoices
-                </li>
-                <li className="flex items-center gap-3">
-                  <Check className="w-5 h-5 text-green-600" />
-                  Unlimited Inventory Items
-                </li>
-                <li className="flex items-center gap-3">
-                  <Check className="w-5 h-5 text-green-600" />
-                  Unlimited Payrolls & Records
-                </li>
-                <li className="flex items-center gap-3">
-                  <Check className="w-5 h-5 text-green-600" />
-                  Unlimited Customer Lists
-                </li>
-                <li className="flex items-center gap-3">
-                  <Check className="w-5 h-5 text-green-600" />
-                  Priority Support
-                </li>
+                {[
+                  "Unlimited Receipts & Invoices",
+                  "Unlimited Inventory Items",
+                  "Unlimited Payrolls & Records",
+                  "Unlimited Customer Lists",
+                  "Priority Support",
+                ].map((feature) => (
+                  <li key={feature} className="flex items-center gap-3">
+                    <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    {feature}
+                  </li>
+                ))}
               </ul>
             </div>
           ))}
         </div>
 
+        {/* Payment Form */}
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
             Complete Your {plans[plan].name} Subscription
           </h2>
 
           <div className="space-y-6">
+            {/* Bank Details */}
             <div className="bg-gray-50 p-6 rounded-xl">
-              <div className="flex justify-between items-center mb-3">
-                <span className="font-semibold">Bank Name:</span>
-                <div className="flex items-center gap-2">
-                  <span>{bankDetails.bankName}</span>
-                  <button onClick={() => copyToClipboard(bankDetails.bankName)}>
-                    <Copy className="w-4 h-4 text-gray-500 hover:text-[#5247bf]" />
-                  </button>
+              {[
+                { label: "Bank Name", value: bankDetails.bankName },
+                { label: "Account Name", value: bankDetails.accountName },
+                { label: "Account Number", value: bankDetails.accountNumber },
+              ].map(({ label, value }) => (
+                <div
+                  key={label}
+                  className="flex justify-between items-center mb-3 last:mb-0"
+                >
+                  <span className="font-semibold">{label}:</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={
+                        label === "Account Number" ? "font-mono text-xl" : ""
+                      }
+                    >
+                      {value}
+                    </span>
+                    <button onClick={() => copyToClipboard(value)}>
+                      <Copy className="w-4 h-4 text-gray-500 hover:text-[#5247bf]" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex justify-between items-center mb-3">
-                <span className="font-semibold">Account Name:</span>
-                <div className="flex items-center gap-2">
-                  <span>{bankDetails.accountName}</span>
-                  <button
-                    onClick={() => copyToClipboard(bankDetails.accountName)}
-                  >
-                    <Copy className="w-4 h-4 text-gray-500 hover:text-[#5247bf]" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="font-semibold">Account Number:</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xl">
-                    {bankDetails.accountNumber}
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard(bankDetails.accountNumber)}
-                  >
-                    <Copy className="w-4 h-4 text-gray-500 hover:text-[#5247bf]" />
-                  </button>
-                </div>
-              </div>
+              ))}
               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="font-bold text-[#5247bf]">
                   Amount to Pay: ₦{plans[plan].amount}
@@ -329,6 +462,7 @@ const Subscribe = () => {
               </div>
             </div>
 
+            {/* File Upload */}
             <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
               <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-lg font-medium mb-4">
@@ -379,7 +513,7 @@ const Subscribe = () => {
         </div>
 
         {copied && (
-          <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in">
+          <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
             <Check className="w-5 h-5" /> Copied!
           </div>
         )}

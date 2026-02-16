@@ -3,9 +3,6 @@ import { auth, db } from "../lib/firebase";
 import {
   collection,
   addDoc,
-  query,
-  orderBy,
-  onSnapshot,
   doc,
   updateDoc,
   deleteDoc,
@@ -19,45 +16,56 @@ import {
   FaQuoteLeft,
   FaCheckCircle,
 } from "react-icons/fa";
-import { toast } from "react-toastify"; // Import toast for notifications
+import { toast } from "react-toastify";
+import api from "../lib/api";
 
 export default function Testimonials() {
   const [testimonials, setTestimonials] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+
+  // Form state
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [userName, setUserName] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false); // Loading state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Edit state
   const [editTestimonial, setEditTestimonial] = useState(null);
   const [editRating, setEditRating] = useState(0);
   const [editComment, setEditComment] = useState("");
   const [editUserName, setEditUserName] = useState("");
 
-  // Check if current user has already submitted a testimonial
   const userTestimonial = testimonials.find((t) => t.userId === user?.uid);
 
+  // Auth listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser?.displayName) setUserName(currentUser.displayName);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
+  // ✅ Replaced onSnapshot with one-time backend fetch
   useEffect(() => {
-    const q = query(
-      collection(db, "testimonials"),
-      orderBy("createdAt", "desc")
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const testimonialsData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setTestimonials(testimonialsData);
-    });
-    return () => unsubscribe();
+    fetchTestimonials();
   }, []);
+
+  const fetchTestimonials = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/testimonials");
+      setTestimonials(res.data.testimonials);
+    } catch (err) {
+      console.error("Error fetching testimonials:", err);
+      toast.error("Failed to load testimonials");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Writes stay as direct Firestore calls (rules: allow write if auth != null)
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -67,13 +75,25 @@ export default function Testimonials() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "testimonials"), {
+      const docRef = await addDoc(collection(db, "testimonials"), {
         userId: user.uid,
         userName: userName.trim() || "Anonymous",
         rating,
         comment,
         createdAt: serverTimestamp(),
       });
+
+      // Optimistic update — prepend to local list
+      const newTestimonial = {
+        id: docRef.id,
+        userId: user.uid,
+        userName: userName.trim() || "Anonymous",
+        rating,
+        comment,
+        createdAt: new Date().toISOString(),
+      };
+      setTestimonials((prev) => [newTestimonial, ...prev]);
+
       toast.success("Thank you for your feedback!");
       setRating(0);
       setComment("");
@@ -96,12 +116,26 @@ export default function Testimonials() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const testimonialRef = doc(db, "testimonials", editTestimonial.id);
-      await updateDoc(testimonialRef, {
+      await updateDoc(doc(db, "testimonials", editTestimonial.id), {
         userName: editUserName.trim(),
         rating: editRating,
         comment: editComment,
       });
+
+      // Sync local list
+      setTestimonials((prev) =>
+        prev.map((t) =>
+          t.id === editTestimonial.id
+            ? {
+                ...t,
+                userName: editUserName.trim(),
+                rating: editRating,
+                comment: editComment,
+              }
+            : t,
+        ),
+      );
+
       toast.success("Testimonial updated!");
       setEditTestimonial(null);
     } catch (err) {
@@ -115,6 +149,7 @@ export default function Testimonials() {
     if (!confirm("Delete this testimonial?")) return;
     try {
       await deleteDoc(doc(db, "testimonials", testimonialId));
+      setTestimonials((prev) => prev.filter((t) => t.id !== testimonialId));
       toast.success("Testimonial removed.");
     } catch (err) {
       toast.error("Delete failed.");
@@ -132,42 +167,54 @@ export default function Testimonials() {
         </p>
       </div>
 
-      <div className="max-w-7xl mx-auto  grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {/* Left Side: Testimonials List */}
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10">
+        {/* Left: Testimonials list */}
         <div className="lg:col-span-7 xl:col-span-8 order-2 lg:order-1">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {testimonials.map((testimonial) => (
-              <div
-                key={testimonial.id}
-                className="p-6 border border-gray-100 rounded-2xl shadow-sm bg-white relative hover:shadow-md transition-all group"
-              >
-                <FaQuoteLeft className="text-indigo-50 absolute top-4 right-4 w-10 h-10 -z-0" />
-                <div className="relative z-10">
-                  <p className="text-gray-900 font-bold text-lg">
-                    {testimonial.userName}
-                  </p>
-                  <div className="flex mt-1 mb-3">
-                    {[...Array(5)].map((_, i) => (
-                      <FaStar
-                        key={i}
-                        className={`w-4 h-4 ${i < testimonial.rating ? "text-yellow-400" : "text-gray-200"}`}
-                      />
-                    ))}
+          {loading ? (
+            <div className="flex justify-center items-center h-40 text-[#5247bf] font-bold">
+              Loading reviews...
+            </div>
+          ) : testimonials.length === 0 ? (
+            <div className="text-center py-20 text-gray-400">
+              <p className="text-lg font-semibold">No reviews yet.</p>
+              <p className="text-sm mt-1">
+                Be the first to share your experience!
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {testimonials.map((testimonial) => (
+                <div
+                  key={testimonial.id}
+                  className="p-6 border border-gray-100 rounded-2xl shadow-sm bg-white relative hover:shadow-md transition-all group"
+                >
+                  <FaQuoteLeft className="text-indigo-50 absolute top-4 right-4 w-10 h-10 -z-0" />
+                  <div className="relative z-10">
+                    <p className="text-gray-900 font-bold text-lg">
+                      {testimonial.userName}
+                    </p>
+                    <div className="flex mt-1 mb-3">
+                      {[...Array(5)].map((_, i) => (
+                        <FaStar
+                          key={i}
+                          className={`w-4 h-4 ${i < testimonial.rating ? "text-yellow-400" : "text-gray-200"}`}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-gray-600 text-sm italic">
+                      "{testimonial.comment}"
+                    </p>
                   </div>
-                  <p className="text-gray-600 text-sm italic">
-                    "{testimonial.comment}"
-                  </p>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Right Side: Sticky Form or Status Card */}
+        {/* Right: Sticky form */}
         <div className="lg:col-span-5 xl:col-span-4 text-gray-700 order-1 lg:order-2">
           <div className="lg:sticky lg:top-24">
             {userTestimonial ? (
-              /* If User Already Submitted */
               <div className="bg-white p-8 rounded-3xl shadow-lg border-2 border-green-50 text-center">
                 <FaCheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                 <h2 className="text-2xl font-black text-gray-900 mb-2">
@@ -193,7 +240,6 @@ export default function Testimonials() {
                 </div>
               </div>
             ) : (
-              /* Create Testimonial Form */
               <div className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100">
                 <h2 className="text-2xl font-black text-gray-900 mb-6">
                   Share Your Experience
@@ -220,9 +266,9 @@ export default function Testimonials() {
                     ))}
                   </div>
                   <textarea
-                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-[#5247bf]"
                     rows="4"
                     placeholder="Your feedback..."
+                    className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-[#5247bf]"
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                   />
@@ -240,7 +286,7 @@ export default function Testimonials() {
         </div>
       </div>
 
-      {/* Edit Modal (used for updates) */}
+      {/* Edit Modal */}
       {editTestimonial && (
         <div className="fixed inset-0 text-gray-700 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md">
@@ -268,8 +314,8 @@ export default function Testimonials() {
                 ))}
               </div>
               <textarea
-                className="w-full p-4 bg-gray-50 rounded-2xl"
                 rows="4"
+                className="w-full p-4 bg-gray-50 rounded-2xl"
                 value={editComment}
                 onChange={(e) => setEditComment(e.target.value)}
               />
@@ -277,14 +323,14 @@ export default function Testimonials() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 py-4 rounded-2xl text-white font-bold bg-[#5247bf]"
+                  className="flex-1 py-4 rounded-2xl text-white font-bold bg-[#5247bf] hover:bg-[#4238a6] disabled:opacity-50 transition-all"
                 >
                   {isSubmitting ? "Updating..." : "Save"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditTestimonial(null)}
-                  className="flex-1 py-4 rounded-2xl text-gray-500 font-bold bg-gray-100"
+                  className="flex-1 py-4 rounded-2xl text-gray-500 font-bold bg-gray-100 hover:bg-gray-200 transition-all"
                 >
                   Cancel
                 </button>

@@ -4,14 +4,8 @@ import InventoryDashboard from "../../components/InventoryDashboard";
 import InventoryOperations from "../../components/InventoryOperations";
 import InventoryGuide from "../../components/InventoryGuide";
 import { useUser } from "../../context/UserContext";
-import { db } from "../../lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore";
+import { toast } from "react-toastify";
+import api from "../../lib/api";
 
 const InventoryManager = () => {
   const { user } = useUser();
@@ -19,61 +13,63 @@ const InventoryManager = () => {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Real-time Data Fetching
+  // ✅ Replaced onSnapshot with a single backend fetch
   useEffect(() => {
     if (!user) return;
-
-    setLoading(true);
-    // Create a query against the 'inventory' collection
-    const q = query(
-      collection(db, "inventory"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
-
-    // Set up a real-time listener
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const items = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setInventory(items);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching inventory:", error);
-        setLoading(false);
-      }
-    );
-
-    // Cleanup listener when component unmounts
-    return () => unsubscribe();
+    fetchInventory();
   }, [user]);
 
+  const fetchInventory = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/inventory");
+      setInventory(res.data.inventory);
+    } catch (err) {
+      console.error("Error fetching inventory:", err);
+      toast.error("Failed to load inventory");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Shared updater passed to both Dashboard and Operations
+  const handleInventoryChange = (updaterFn) => {
+    setInventory((prev) =>
+      typeof updaterFn === "function" ? updaterFn(prev) : updaterFn,
+    );
+  };
+
   const tabs = [
-    {
-      id: "dashboard",
-      label: "Stock Dashboard",
-      icon: LayoutDashboard,
-      component: InventoryDashboard,
-    },
-    {
-      id: "operations",
-      label: "Manage Stock",
-      icon: PackagePlus,
-      component: InventoryOperations,
-    },
-    {
-      id: "guide",
-      label: "How to Use",
-      icon: BookOpen,
-      component: InventoryGuide,
-    },
+    { id: "dashboard", label: "Stock Dashboard", icon: LayoutDashboard },
+    { id: "operations", label: "Manage Stock", icon: PackagePlus },
+    { id: "guide", label: "How to Use", icon: BookOpen },
   ];
 
-  const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component;
+  // ✅ Render children directly (not via ActiveComponent) so all props are passed
+  const renderTab = () => {
+    switch (activeTab) {
+      case "dashboard":
+        return (
+          <InventoryDashboard
+            inventory={inventory}
+            loading={loading}
+            onInventoryChange={handleInventoryChange}
+          />
+        );
+      case "operations":
+        return (
+          <InventoryOperations
+            inventory={inventory}
+            onInventoryChange={handleInventoryChange}
+            switchToTab={setActiveTab}
+          />
+        );
+      case "guide":
+        return <InventoryGuide />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-6 md:pt-6">
@@ -102,15 +98,7 @@ const InventoryManager = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto py-6">
-        {ActiveComponent && (
-          <ActiveComponent
-            inventory={inventory}
-            loading={loading}
-            switchToTab={setActiveTab}
-          />
-        )}
-      </div>
+      <div className="max-w-7xl mx-auto py-6">{renderTab()}</div>
     </div>
   );
 };

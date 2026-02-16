@@ -1,5 +1,6 @@
+// src/context/UserContext.jsx
 import { createContext, useContext, useState, useEffect, useRef } from "react";
-import { auth, db } from "../lib/firebase";
+import { auth } from "../lib/firebase";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -7,9 +8,9 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import api from "../lib/api";
 
 const UserContext = createContext();
 
@@ -19,88 +20,58 @@ export function UserProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Use a ref to track the active unsubscribe function
-  const unsubscribeRef = useRef(null);
+  // ✅ Flag to skip /me fetch when signup is in progress
+  // Signup handles its own navigation — we don't want onAuthStateChanged
+  // racing against the backend profile creation
+  const isSigningUp = useRef(false);
 
-  // 1. Auth State Listener
   useEffect(() => {
-    const authUnsubscribe = auth.onAuthStateChanged((currentUser) => {
+    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
       setUser(currentUser);
 
-      // If user logs out, clean up everything immediately
-      if (!currentUser) {
-        if (unsubscribeRef.current) {
-          unsubscribeRef.current(); // Stop Firestore listener
-          unsubscribeRef.current = null;
+      if (currentUser) {
+        // ✅ Skip if signup is in progress — SignUp.jsx handles everything
+        if (isSigningUp.current) {
+          setLoading(false);
+          return;
         }
-        setUserData(null);
-        setLoading(false);
-      }
-    });
 
-    return () => authUnsubscribe();
-  }, []);
-
-  // 2. User Data Listener (Real-time Profile Sync)
-  useEffect(() => {
-    // Stop any existing listener if the user changed
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-      unsubscribeRef.current = null;
-    }
-
-    if (!user) return;
-
-    const userDocRef = doc(db, "users", user.uid);
-
-    // Set up the listener and store the unsubscribe function in the ref
-    unsubscribeRef.current = onSnapshot(
-      userDocRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          setUserData({ id: docSnap.id, ...docSnap.data() });
-        } else {
+        // Normal login or page refresh — profile already exists, safe to fetch
+        try {
+          const res = await api.get("/auth/me");
+          setUserData(res.data);
+        } catch (err) {
+          console.error("Failed to restore user session:", err.message);
           setUserData(null);
         }
-        setLoading(false);
-      },
-      (err) => {
-        // Handle common permission errors during logout transitions
-        if (err.code === "permission-denied") {
-          console.warn("User data access denied (likely logged out).");
-        } else {
-          console.error("Firestore Snapshot Error:", err);
-        }
-        setLoading(false);
+      } else {
+        setUserData(null);
       }
-    );
 
-    return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
-    };
-  }, [user]);
+      setLoading(false);
+    });
 
-  // --- ACTIONS ---
+    return () => unsubscribe();
+  }, []);
 
   const signupWithEmail = async (name, email, password) => {
-    setLoading(true);
+    // ✅ Raise the flag BEFORE Firebase creates the user
+    // This prevents onAuthStateChanged from calling /api/auth/me too early
+    isSigningUp.current = true;
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
-        password
+        password,
       );
       const newUser = userCredential.user;
       await updateProfile(newUser, { displayName: name });
       return newUser;
     } catch (err) {
+      isSigningUp.current = false; // Reset on failure
       throw new Error(err.message || "Signup failed");
-    } finally {
-      setLoading(false);
     }
+    // ✅ Do NOT reset here — SignUp.jsx resets it after backend call completes
   };
 
   const loginWithEmail = async (email, password) => {
@@ -109,13 +80,18 @@ export function UserProvider({ children }) {
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email,
-        password
+        password,
       );
+      const res = await api.get("/auth/me");
+      setUserData(res.data);
       toast.success("Logged in successfully!");
       navigate("/dashboard");
       return userCredential.user;
     } catch (err) {
-      throw new Error("Invalid email or password");
+      if (err.code?.startsWith("auth/")) {
+        throw new Error("Invalid email or password");
+      }
+      throw new Error(err.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -123,15 +99,8 @@ export function UserProvider({ children }) {
 
   const logout = async () => {
     try {
-      // 1. Manually stop the listener before calling signOut
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
-      // 2. Clear state
       setUserData(null);
       setUser(null);
-      // 3. Sign out of Firebase
       await signOut(auth);
       navigate("/login");
       toast.success("Logged out successfully");
@@ -140,10 +109,26 @@ export function UserProvider({ children }) {
     }
   };
 
+  const sendPasswordReset = async (email) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (err) {
+      throw new Error(err.message || "Failed to send reset email");
+    }
+  };
+
   const hasAccessToCreate = () => {
-    if (!userData || !userData.subscription) return false;
-    const status = userData.subscription.status;
-    return status === "active";
+    if (!userData?.subscription) return false;
+    return userData.subscription.status === "active";
+  };
+
+  const refreshUserData = async () => {
+    try {
+      const res = await api.get("/auth/me");
+      setUserData(res.data);
+    } catch (err) {
+      console.error("Failed to refresh user data:", err.message);
+    }
   };
 
   return (
@@ -156,6 +141,10 @@ export function UserProvider({ children }) {
         logout,
         loading,
         hasAccessToCreate,
+        sendPasswordReset,
+        refreshUserData,
+        isSigningUp,
+        setUserData,
       }}
     >
       {children}

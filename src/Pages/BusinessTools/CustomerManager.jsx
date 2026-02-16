@@ -1,17 +1,11 @@
 import { useState, useEffect } from "react";
-import { Users, UserPlus, BarChart3, LayoutList } from "lucide-react";
+import { UserPlus, BarChart3, LayoutList } from "lucide-react";
 import CustomerForm from "../../components/CustomerForm";
 import CustomerList from "../../components/CustomerList";
 import CustomerAnalytics from "../../components/CustomerAnalytics";
 import { useUser } from "../../context/UserContext";
-import { db } from "../../lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore";
+import { toast } from "react-toastify";
+import api from "../../lib/api";
 
 const CustomerManager = () => {
   const { user } = useUser();
@@ -19,57 +13,67 @@ const CustomerManager = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ✅ Replaced onSnapshot with backend fetch
   useEffect(() => {
     if (!user) return;
-
-    setLoading(true);
-    const q = query(
-      collection(db, "customers"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const items = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setCustomers(items);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching customers:", error);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
+    fetchCustomers();
   }, [user]);
 
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/customers");
+      setCustomers(res.data.customers);
+    } catch (err) {
+      console.error("Error fetching customers:", err);
+      toast.error("Failed to load customers");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Shared updater — passed to List (delete/edit) and Form (add)
+  const handleCustomersChange = (updaterFn) => {
+    setCustomers((prev) =>
+      typeof updaterFn === "function" ? updaterFn(prev) : updaterFn,
+    );
+  };
+
+  // Called by CustomerForm after a successful save
+  const handleCustomerAdded = (newCustomer) => {
+    setCustomers((prev) => [newCustomer, ...prev]);
+  };
+
   const tabs = [
-    {
-      id: "list",
-      label: "Customer List",
-      icon: LayoutList,
-      component: CustomerList,
-    },
-    {
-      id: "add",
-      label: "Add Customer",
-      icon: UserPlus,
-      component: CustomerForm,
-    },
-    {
-      id: "analytics",
-      label: "Insights",
-      icon: BarChart3,
-      component: CustomerAnalytics,
-    },
+    { id: "list", label: "Customer List", icon: LayoutList },
+    { id: "add", label: "Add Customer", icon: UserPlus },
+    { id: "analytics", label: "Insights", icon: BarChart3 },
   ];
 
-  const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component;
+  // ✅ Explicit render so all props are passed correctly
+  const renderTab = () => {
+    switch (activeTab) {
+      case "list":
+        return (
+          <CustomerList
+            customers={customers}
+            loading={loading}
+            onCustomersChange={handleCustomersChange}
+          />
+        );
+      case "add":
+        return (
+          <CustomerForm
+            switchToTab={setActiveTab}
+            onCustomerAdded={handleCustomerAdded}
+          />
+        );
+      case "analytics":
+        return <CustomerAnalytics customers={customers} />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-6 md:pt-6">
@@ -98,15 +102,7 @@ const CustomerManager = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto py-6">
-        {ActiveComponent && (
-          <ActiveComponent
-            customers={customers}
-            loading={loading}
-            switchToTab={setActiveTab}
-          />
-        )}
-      </div>
+      <div className="max-w-7xl mx-auto py-6">{renderTab()}</div>
     </div>
   );
 };

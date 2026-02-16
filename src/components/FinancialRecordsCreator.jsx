@@ -1,20 +1,8 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
-import { db } from "../lib/firebase";
 import { useSubscription } from "../context/SubscriptionContext";
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from "firebase/firestore";
 import { toast } from "react-toastify";
+import api from "../lib/api";
 import {
   Plus,
   Edit2,
@@ -26,8 +14,6 @@ import {
   Lock,
   LockIcon,
 } from "lucide-react";
-
-const COLLECTION_NAME = "financialRecords";
 
 const FinancialRecordsCreator = () => {
   const { user } = useUser();
@@ -55,7 +41,7 @@ const FinancialRecordsCreator = () => {
 
   useEffect(() => {
     if (user && !isPaid) {
-      getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
+      getLimitStatus("financialRecords").then(setLimitStatus);
     }
   }, [user, isPaid, getLimitStatus]);
 
@@ -67,13 +53,10 @@ const FinancialRecordsCreator = () => {
     groupRecordsByWeek();
   }, [records]);
 
-  // --- NEW GROUPING LOGIC START ---
   // Helper: Get the Monday of the week for any given date
   const getStartOfWeek = (dateString) => {
     const d = new Date(dateString);
-    const day = d.getDay(); // 0 (Sun) to 6 (Sat)
-    // Calculate difference to get to Monday.
-    // If Sunday (0), subtract 6 days. If Mon (1), subtract 0. If Tue (2), subtract 1...
+    const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
     monday.setHours(0, 0, 0, 0);
@@ -84,28 +67,21 @@ const FinancialRecordsCreator = () => {
   const getWeekRangeLabel = (mondayDateString) => {
     const start = new Date(mondayDateString);
     const end = new Date(start);
-    end.setDate(end.getDate() + 6); // Add 6 days to get Sunday
-
+    end.setDate(end.getDate() + 6);
     const options = { month: "short", day: "numeric" };
-    return `${start.toLocaleDateString("en-US", options)} - ${end.toLocaleDateString(
-      "en-US",
-      options
-    )}`;
+    return `${start.toLocaleDateString("en-US", options)} - ${end.toLocaleDateString("en-US", options)}`;
   };
 
   const groupRecordsByWeek = () => {
     const grouped = {};
     let runningBalance = 0;
 
-    // Sort by Date Ascending first to calculate running balance correctly
     const sortedRecords = [...records].sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
+      (a, b) => new Date(a.date) - new Date(b.date),
     );
 
     sortedRecords.forEach((record) => {
-      // Get the Monday of this record's week as the unique Key
       const startOfWeek = getStartOfWeek(record.date);
-      // Use ISO string (YYYY-MM-DD) of that Monday as the key
       const weekKey = startOfWeek.toISOString().split("T")[0];
 
       if (!grouped[weekKey]) {
@@ -114,7 +90,7 @@ const FinancialRecordsCreator = () => {
           totalInflow: 0,
           totalOutflow: 0,
           startingBalance: runningBalance,
-          dateLabel: getWeekRangeLabel(weekKey), // Store the readable label
+          dateLabel: getWeekRangeLabel(weekKey),
         };
       }
 
@@ -130,24 +106,14 @@ const FinancialRecordsCreator = () => {
 
     setGroupedRecords(grouped);
   };
-  // --- NEW GROUPING LOGIC END ---
 
   const fetchRecords = async () => {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        where("userId", "==", user.uid),
-        orderBy("date", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      const recordsData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setRecords(recordsData);
-    } catch (error) {
-      console.error("Error fetching records:", error);
+      const res = await api.get("/financial-records");
+      setRecords(res.data.records);
+    } catch (err) {
+      console.error("Error fetching records:", err);
       toast.error("Failed to load records");
     } finally {
       setLoading(false);
@@ -173,22 +139,19 @@ const FinancialRecordsCreator = () => {
     }
 
     try {
-      const recordData = {
-        userId: user.uid,
+      const payload = {
         date: formData.date,
         details: formData.details,
         inflow: parseFloat(formData.inflow) || 0,
         outflow: parseFloat(formData.outflow) || 0,
         paymentMethod: formData.paymentMethod,
-        // We don't need to save weekId anymore as we calculate it dynamically
-        createdAt: serverTimestamp(),
       };
 
       if (editingRecord) {
-        await updateDoc(doc(db, COLLECTION_NAME, editingRecord.id), recordData);
+        await api.put(`/financial-records/${editingRecord.id}`, payload);
         toast.success("Record updated successfully");
       } else {
-        await addDoc(collection(db, COLLECTION_NAME), recordData);
+        await api.post("/financial-records", payload);
         toast.success("Record added successfully");
       }
 
@@ -202,10 +165,13 @@ const FinancialRecordsCreator = () => {
         paymentMethod: "Cash",
       });
       fetchRecords();
-      if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
-    } catch (error) {
-      console.error("Error saving record:", error);
-      toast.error("Failed to save record");
+      if (!isPaid) getLimitStatus("financialRecords").then(setLimitStatus);
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error(err.response?.data?.error || "Failed to save record");
+      }
     }
   };
 
@@ -222,7 +188,6 @@ const FinancialRecordsCreator = () => {
   };
 
   const handleDelete = async (recordId) => {
-    // --- UPDATED: Prevent delete if not paid ---
     if (!isPaid) {
       setShowLimitModal(true);
       return;
@@ -231,18 +196,20 @@ const FinancialRecordsCreator = () => {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
 
     try {
-      await deleteDoc(doc(db, COLLECTION_NAME, recordId));
+      await api.delete(`/financial-records/${recordId}`);
       toast.success("Record deleted successfully");
       fetchRecords();
-      if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
-    } catch (error) {
-      console.error("Error deleting record:", error);
-      toast.error("Failed to delete record");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error("Failed to delete record");
+      }
     }
   };
 
   const openCreateModal = async () => {
-    const allowed = await canWriteTo(COLLECTION_NAME);
+    const allowed = await canWriteTo("financialRecords");
     if (!allowed) {
       setShowLimitModal(true);
     } else {
@@ -340,7 +307,7 @@ const FinancialRecordsCreator = () => {
           ) : (
             <div className="space-y-6">
               {Object.entries(groupedRecords)
-                .sort(([a], [b]) => b.localeCompare(a)) // Sort weeks descending (newest first)
+                .sort(([a], [b]) => b.localeCompare(a))
                 .map(([weekKey, weekData]) => {
                   const netBalance =
                     weekData.totalInflow - weekData.totalOutflow;
@@ -355,7 +322,6 @@ const FinancialRecordsCreator = () => {
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                           <div>
                             <h3 className="text-lg md:text-xl font-bold text-white">
-                              {/* Display the calculated label (Dec 1 - Dec 7) */}
                               {weekData.dateLabel}
                             </h3>
                             <p className="text-white/80 text-sm">
@@ -368,7 +334,7 @@ const FinancialRecordsCreator = () => {
                               <p className="text-white font-bold text-sm md:text-base">
                                 ₦
                                 {formatCurrency(
-                                  weekData.totalInflow.toFixed(2)
+                                  weekData.totalInflow.toFixed(2),
                                 )}
                               </p>
                             </div>
@@ -377,7 +343,7 @@ const FinancialRecordsCreator = () => {
                               <p className="text-white font-bold text-sm md:text-base">
                                 ₦
                                 {formatCurrency(
-                                  weekData.totalOutflow.toFixed(2)
+                                  weekData.totalOutflow.toFixed(2),
                                 )}
                               </p>
                             </div>
@@ -397,7 +363,7 @@ const FinancialRecordsCreator = () => {
                               <p className="font-bold text-sm md:text-base text-white">
                                 ₦
                                 {formatCurrency(
-                                  Math.abs(netBalance).toFixed(2)
+                                  Math.abs(netBalance).toFixed(2),
                                 )}
                               </p>
                             </div>
@@ -435,7 +401,7 @@ const FinancialRecordsCreator = () => {
                           <tbody>
                             {weekData.records
                               .sort(
-                                (a, b) => new Date(b.date) - new Date(a.date)
+                                (a, b) => new Date(b.date) - new Date(a.date),
                               )
                               .map((record) => (
                                 <tr
@@ -450,16 +416,12 @@ const FinancialRecordsCreator = () => {
                                   </td>
                                   <td className="p-3 text-right text-green-600 font-semibold">
                                     {record.inflow
-                                      ? `₦${formatCurrency(
-                                          record.inflow.toFixed(2)
-                                        )}`
+                                      ? `₦${formatCurrency(record.inflow.toFixed(2))}`
                                       : "-"}
                                   </td>
                                   <td className="p-3 text-right text-red-600 font-semibold">
                                     {record.outflow
-                                      ? `₦${formatCurrency(
-                                          record.outflow.toFixed(2)
-                                        )}`
+                                      ? `₦${formatCurrency(record.outflow.toFixed(2))}`
                                       : "-"}
                                   </td>
                                   <td className="p-3 text-gray-700">
@@ -476,8 +438,6 @@ const FinancialRecordsCreator = () => {
                                       >
                                         <Edit2 className="w-4 h-4" />
                                       </button>
-
-                                      {/* --- UPDATED DELETE BUTTON --- */}
                                       <button
                                         onClick={() => handleDelete(record.id)}
                                         disabled={!isPaid}

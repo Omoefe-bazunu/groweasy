@@ -1,16 +1,6 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
-import { useSubscription } from "../context/SubscriptionContext"; // Added Context
-import { db } from "../lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
+import { useSubscription } from "../context/SubscriptionContext";
 import {
   Search,
   Calendar,
@@ -18,15 +8,18 @@ import {
   Plus,
   Download,
   Trash2,
-  Lock, // Added Lock Icon
+  Lock,
+  Loader2,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import api from "../lib/api";
 
 const QuotationsList = () => {
   const { user } = useUser();
-  const { isPaid } = useSubscription(); // Get subscription status
+  const { isPaid } = useSubscription();
+
   const [quotations, setQuotations] = useState([]);
   const [filteredQuotations, setFilteredQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,7 +27,7 @@ const QuotationsList = () => {
   const [searchDate, setSearchDate] = useState("");
   const [downloading, setDownloading] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [showLimitModal, setShowLimitModal] = useState(false); // Modal State
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   useEffect(() => {
     fetchQuotations();
@@ -44,24 +37,16 @@ const QuotationsList = () => {
     filterQuotations();
   }, [searchText, searchDate, quotations]);
 
+  // ✅ Fetch from backend instead of Firestore directly
   const fetchQuotations = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "quotations"),
-        where("userId", "==", user.uid),
-        orderBy("createdAt", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setQuotations(data);
-      setFilteredQuotations(data);
-    } catch (error) {
-      console.error("Error fetching quotations:", error);
+      const res = await api.get("/quotations");
+      setQuotations(res.data.quotations);
+      setFilteredQuotations(res.data.quotations);
+    } catch (err) {
+      console.error("Error fetching quotations:", err);
       toast.error("Failed to load quotations");
     } finally {
       setLoading(false);
@@ -75,7 +60,7 @@ const QuotationsList = () => {
         (q) =>
           q.businessName?.toLowerCase().includes(searchText.toLowerCase()) ||
           q.quotationNumber?.toLowerCase().includes(searchText.toLowerCase()) ||
-          q.clientName?.toLowerCase().includes(searchText.toLowerCase())
+          q.clientName?.toLowerCase().includes(searchText.toLowerCase()),
       );
     }
     if (searchDate) {
@@ -84,34 +69,36 @@ const QuotationsList = () => {
     setFilteredQuotations(filtered);
   };
 
+  // ✅ Delete via backend — backend enforces isPaid check
   const deleteQuotation = async (id) => {
-    // --- LOCK CHECK ---
     if (!isPaid) {
       setShowLimitModal(true);
       return;
     }
-
     if (!window.confirm("Delete this quotation?")) return;
+
     setDeleting(id);
     try {
-      await deleteDoc(doc(db, "quotations", id));
-      setQuotations(quotations.filter((q) => q.id !== id));
+      await api.delete(`/quotations/${id}`);
+      setQuotations((prev) => prev.filter((q) => q.id !== id));
       toast.success("Quotation deleted");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to delete");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error("Failed to delete quotation");
+      }
     } finally {
       setDeleting(null);
     }
   };
 
-  // --- DOWNLOAD AS IMAGE ---
+  // ── Download helpers (unchanged — purely client-side) ─────────────────────
   const downloadAsImage = async (quotation) => {
     setDownloading(quotation.id);
     try {
-      const html = generateQuotationHTML(quotation);
       const tempDiv = document.createElement("div");
-      tempDiv.innerHTML = html;
+      tempDiv.innerHTML = generateQuotationHTML(quotation);
       tempDiv.style.position = "absolute";
       tempDiv.style.left = "-9999px";
       document.body.appendChild(tempDiv);
@@ -129,22 +116,19 @@ const QuotationsList = () => {
       link.click();
 
       document.body.removeChild(tempDiv);
-      toast.success("Quotation downloaded as image!");
-    } catch (error) {
-      console.error("Error downloading image:", error);
+      toast.success("Downloaded as image!");
+    } catch (err) {
       toast.error("Failed to download image");
     } finally {
       setDownloading(null);
     }
   };
 
-  // --- DOWNLOAD AS PDF ---
   const downloadAsPDF = async (quotation) => {
     setDownloading(quotation.id);
     try {
-      const html = generateQuotationHTML(quotation);
       const tempDiv = document.createElement("div");
-      tempDiv.innerHTML = html;
+      tempDiv.innerHTML = generateQuotationHTML(quotation);
       tempDiv.style.position = "absolute";
       tempDiv.style.left = "-9999px";
       document.body.appendChild(tempDiv);
@@ -155,7 +139,6 @@ const QuotationsList = () => {
         allowTaint: true,
         logging: false,
       });
-
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
@@ -165,147 +148,147 @@ const QuotationsList = () => {
       pdf.save(`quotation_${quotation.quotationNumber || quotation.date}.pdf`);
 
       document.body.removeChild(tempDiv);
-      toast.success("Quotation downloaded as PDF!");
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
+      toast.success("Downloaded as PDF!");
+    } catch (err) {
       toast.error("Failed to download PDF");
     } finally {
       setDownloading(null);
     }
   };
 
-  const generateQuotationHTML = (data) => {
-    return `
-      <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
-        
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid ${data.brandColor}; padding-bottom: 16px;">
-          <div style="flex: 1;">
-            <h1 style="font-size: 24px; font-weight: bold; color: ${data.brandColor}; margin: 0;">${data.businessName || "Business Name"}</h1>
-            <p style="font-size: 14px; color: #666; margin: 4px 0;">${data.address || "Address"}</p>
-            ${data.contactEmail ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${data.contactEmail}</p>` : ""}
-            ${data.contactNumber ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${data.contactNumber}</p>` : ""}
-          </div>
-          <div style="text-align: right;">
-            <h2 style="font-size: 20px; font-weight: bold; color: ${data.brandColor}; margin: 0;">QUOTATION</h2>
-            ${data.quotationNumber ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">#${data.quotationNumber}</p>` : ""}
-            <p style="font-size: 14px; color: #666; margin: 4px 0;">Date: ${data.date}</p>
-          </div>
+  const generateQuotationHTML = (data) => `
+    <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid ${data.brandColor}; padding-bottom: 16px;">
+        <div style="flex: 1;">
+          <h1 style="font-size: 24px; font-weight: bold; color: ${data.brandColor}; margin: 0;">${data.businessName || "Business Name"}</h1>
+          <p style="font-size: 14px; color: #666; margin: 4px 0;">${data.address || "Address"}</p>
+          ${data.contactEmail ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${data.contactEmail}</p>` : ""}
+          ${data.contactNumber ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${data.contactNumber}</p>` : ""}
         </div>
-        
-        ${
-          data.clientName ||
-          data.clientContact ||
-          data.clientLocation ||
-          data.clientOccupation
-            ? `
-          <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
-            <h3 style="font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">QUOTATION FOR</h3>
-            ${data.clientName ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Name:</span> ${data.clientName}</p>` : ""}
-            ${data.clientContact ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Contact:</span> ${data.clientContact}</p>` : ""}
-            ${data.clientLocation ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Location:</span> ${data.clientLocation}</p>` : ""}
-            ${data.clientOccupation ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Occupation:</span> ${data.clientOccupation}</p>` : ""}
-          </div>
-        `
-            : ""
-        }
-
-        ${
-          data.accountName || data.accountNumber || data.bankName
-            ? `
-          <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
-            <h3 style="font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">PAYMENT DETAILS</h3>
-            ${data.bankName ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Bank Name:</span> ${data.bankName}</p>` : ""}
-            ${data.accountNumber ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Number:</span> ${data.accountNumber}</p>` : ""}
-            ${data.accountName ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Name:</span> ${data.accountName}</p>` : ""}
-          </div>
-        `
-            : ""
-        }
-
-        <table style="width: 100%; font-size: 14px; margin-bottom: 16px; border-collapse: collapse;">
-          <thead>
-            <tr style="background-color: ${data.brandColor}; color: white;">
-              <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Description</th>
-              <th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Qty</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Unit Price</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Amount</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Discount</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.items
-              .map(
-                (item) => `
-              <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">${item.description || "-"}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${item.qty || "-"}</td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                   ${item.unitPrice ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-                </td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                   ${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-                </td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                   ${item.discount ? `₦${parseFloat(item.discount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-                </td>
-                <td style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">
-                   ${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-                </td>
-              </tr>
-            `
-              )
-              .join("")}
-          </tbody>
-          <tfoot>
-             <tr style="background-color: #f5f5f5;">
-                <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total Estimate:</td>
-                <td style="padding: 8px; text-align: right; font-weight: bold; color: ${data.brandColor}; border: 1px solid #ddd;">₦${parseFloat(data.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-             </tr>
-             ${
-               data.validUntil
-                 ? `
-              <tr>
-                <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Valid Until:</td>
-                <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">${data.validUntil}</td>
-              </tr>
-             `
-                 : ""
-             }
-          </tfoot>
-        </table>
-
-        ${
-          data.termsAndConditions
-            ? `
-          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee;">
-            <h4 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #444;">TERMS & CONDITIONS</h4>
-            <p style="font-size: 12px; color: #555; white-space: pre-wrap; line-height: 1.5;">${data.termsAndConditions}</p>
-          </div>
-        `
-            : ""
-        }
-        
-        ${
-          data.signatureName
-            ? `
-          <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #ddd;">
-            <p style="font-size: 14px; font-weight: 600; margin: 0;">${data.signatureName}</p>
-            ${data.signatoryPosition ? `<p style="font-size: 12px; color: #666; margin: 4px 0;">${data.signatoryPosition}</p>` : ""}
-          </div>
-        `
-            : ""
-        }
+        <div style="text-align: right;">
+          <h2 style="font-size: 20px; font-weight: bold; color: ${data.brandColor}; margin: 0;">QUOTATION</h2>
+          ${data.quotationNumber ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">#${data.quotationNumber}</p>` : ""}
+          <p style="font-size: 14px; color: #666; margin: 4px 0;">Date: ${data.date}</p>
+        </div>
       </div>
-    `;
-  };
 
-  if (loading)
-    return <div className="p-10 text-center">Loading quotations...</div>;
+      ${
+        data.clientName || data.clientContact || data.clientLocation
+          ? `
+        <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
+          <h3 style="font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">QUOTATION FOR</h3>
+          ${data.clientName ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Name:</span> ${data.clientName}</p>` : ""}
+          ${data.clientContact ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Contact:</span> ${data.clientContact}</p>` : ""}
+          ${data.clientLocation ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Location:</span> ${data.clientLocation}</p>` : ""}
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        data.accountName || data.accountNumber || data.bankName
+          ? `
+        <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
+          <h3 style="font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">PAYMENT DETAILS</h3>
+          ${data.bankName ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Bank Name:</span> ${data.bankName}</p>` : ""}
+          ${data.accountNumber ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Number:</span> ${data.accountNumber}</p>` : ""}
+          ${data.accountName ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Name:</span> ${data.accountName}</p>` : ""}
+        </div>
+      `
+          : ""
+      }
+
+      <table style="width: 100%; font-size: 14px; margin-bottom: 16px; border-collapse: collapse;">
+        <thead>
+          <tr style="background-color: ${data.brandColor}; color: white;">
+            <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Description</th>
+            <th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Qty</th>
+            <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Unit Price</th>
+            <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Amount</th>
+            <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Discount</th>
+            <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(data.items || [])
+            .map(
+              (item) => `
+            <tr style="border-bottom: 1px solid #ddd;">
+              <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">${item.description || "-"}</td>
+              <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${item.qty || "-"}</td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
+                ${item.unitPrice ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+              </td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
+                ${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+              </td>
+              <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
+                ${item.discount ? `₦${parseFloat(item.discount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+              </td>
+              <td style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">
+                ${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+              </td>
+            </tr>
+          `,
+            )
+            .join("")}
+        </tbody>
+        <tfoot>
+          <tr style="background-color: #f5f5f5;">
+            <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total Estimate:</td>
+            <td style="padding: 8px; text-align: right; font-weight: bold; color: ${data.brandColor}; border: 1px solid #ddd;">
+              ₦${parseFloat(data.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+          </tr>
+          ${
+            data.validUntil
+              ? `
+            <tr>
+              <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Valid Until:</td>
+              <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">${data.validUntil}</td>
+            </tr>
+          `
+              : ""
+          }
+        </tfoot>
+      </table>
+
+      ${
+        data.termsAndConditions
+          ? `
+        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee;">
+          <h4 style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #444;">TERMS & CONDITIONS</h4>
+          <p style="font-size: 12px; color: #555; white-space: pre-wrap; line-height: 1.5;">${data.termsAndConditions}</p>
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        data.signatureName
+          ? `
+        <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #ddd;">
+          <p style="font-size: 14px; font-weight: 600; margin: 0;">${data.signatureName}</p>
+          ${data.signatoryPosition ? `<p style="font-size: 12px; color: #666; margin: 4px 0;">${data.signatoryPosition}</p>` : ""}
+        </div>
+      `
+          : ""
+      }
+    </div>
+  `;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#0ea5e9]" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 px-2 pt-6 pb-30 text-gray-600">
       <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Quotations</h1>
@@ -321,11 +304,11 @@ const QuotationsList = () => {
           </button>
         </div>
 
-        {/* Search Bar */}
+        {/* Search */}
         <div className="bg-white rounded-xl shadow-md p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
                 placeholder="Search client, business or number..."
@@ -335,7 +318,7 @@ const QuotationsList = () => {
               />
             </div>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="date"
                 value={searchDate}
@@ -367,9 +350,6 @@ const QuotationsList = () => {
                     <h3 className="text-lg font-semibold text-gray-900 truncate flex-1">
                       {q.clientName || "Unknown Client"}
                     </h3>
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                      {q.status || "Pending"}
-                    </span>
                   </div>
                   <p className="text-sm text-gray-500 mb-4">{q.businessName}</p>
 
@@ -395,7 +375,7 @@ const QuotationsList = () => {
                       disabled={downloading === q.id || deleting === q.id}
                       className="flex-1 flex items-center justify-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
-                      <Download className="w-4 h-4" />{" "}
+                      <Download className="w-4 h-4" />
                       {downloading === q.id ? "..." : "Image"}
                     </button>
 
@@ -404,11 +384,10 @@ const QuotationsList = () => {
                       disabled={downloading === q.id || deleting === q.id}
                       className="flex-1 flex items-center justify-center gap-1 bg-[#0ea5e9] text-white hover:bg-[#0284c7] text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
-                      <Download className="w-4 h-4" />{" "}
+                      <Download className="w-4 h-4" />
                       {downloading === q.id ? "..." : "PDF"}
                     </button>
 
-                    {/* Updated Delete Button */}
                     <button
                       onClick={() => deleteQuotation(q.id)}
                       disabled={
@@ -421,7 +400,9 @@ const QuotationsList = () => {
                       } disabled:opacity-70`}
                       title={!isPaid ? "Upgrade to delete items" : "Delete"}
                     >
-                      {!isPaid ? (
+                      {deleting === q.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : !isPaid ? (
                         <Lock className="w-4 h-4" />
                       ) : (
                         <Trash2 className="w-4 h-4" />

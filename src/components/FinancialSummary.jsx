@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
-import { db } from "../lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
 import { toast } from "react-toastify";
+import api from "../lib/api";
 import {
   LineChart,
   Line,
@@ -62,18 +61,10 @@ const FinancialSummary = () => {
   const fetchRecords = async () => {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "financialRecords"),
-        where("userId", "==", user.uid)
-      );
-      const querySnapshot = await getDocs(q);
-      const recordsData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setRecords(recordsData);
-    } catch (error) {
-      console.error("Error fetching records:", error);
+      const res = await api.get("/financial-records");
+      setRecords(res.data.records);
+    } catch (err) {
+      console.error("Error fetching records:", err);
       toast.error("Failed to load records");
     } finally {
       setLoading(false);
@@ -104,7 +95,7 @@ const FinancialSummary = () => {
     switch (period) {
       case "weekly": {
         const weekNum = Math.ceil(
-          (date.getDate() + new Date(year, month, 1).getDay()) / 7
+          (date.getDate() + new Date(year, month, 1).getDay()) / 7,
         );
         return `${year}-${String(month + 1).padStart(2, "0")}-W${weekNum}`;
       }
@@ -138,7 +129,6 @@ const FinancialSummary = () => {
       grouped[key].outflow += record.outflow || 0;
       grouped[key].count += 1;
       grouped[key].transactions.push(record);
-      // Default to "Cash" if paymentMethod is undefined
       const paymentMethod = record.paymentMethod || "Cash";
       grouped[key].paymentMethods[paymentMethod] =
         (grouped[key].paymentMethods[paymentMethod] || 0) + 1;
@@ -187,12 +177,12 @@ const FinancialSummary = () => {
       return;
     }
 
-    const insights = [];
+    const newInsights = [];
     const totalInflow = filtered.reduce((sum, r) => sum + (r.inflow || 0), 0);
     const totalOutflow = filtered.reduce((sum, r) => sum + (r.outflow || 0), 0);
     const netBalance = totalInflow - totalOutflow;
 
-    insights.push({
+    newInsights.push({
       type: netBalance >= 0 ? "positive" : "negative",
       icon: netBalance >= 0 ? TrendingUp : TrendingDown,
       title: netBalance >= 0 ? "Profitable Period" : "Deficit Period",
@@ -201,9 +191,9 @@ const FinancialSummary = () => {
 
     if (summary.periods && summary.periods.length > 0) {
       const bestPeriod = summary.periods.reduce((max, p) =>
-        p.net > max.net ? p : max
+        p.net > max.net ? p : max,
       );
-      insights.push({
+      newInsights.push({
         type: "info",
         icon: Activity,
         title: `Best ${period.charAt(0).toUpperCase() + period.slice(1)}`,
@@ -213,7 +203,7 @@ const FinancialSummary = () => {
 
     const avgInflow =
       totalInflow / (filtered.filter((r) => r.inflow > 0).length || 1);
-    insights.push({
+    newInsights.push({
       type: "info",
       icon: TbCurrencyNaira,
       title: "Average Inflow",
@@ -227,9 +217,9 @@ const FinancialSummary = () => {
     }, {});
     const dominantMethod = Object.entries(paymentCounts).reduce(
       (max, [method, count]) => (count > max.count ? { method, count } : max),
-      { method: "Cash", count: 0 }
+      { method: "Cash", count: 0 },
     );
-    insights.push({
+    newInsights.push({
       type: "info",
       icon: TbCurrencyNaira,
       title: "Preferred Payment Method",
@@ -238,14 +228,14 @@ const FinancialSummary = () => {
 
     if (summary.periods && summary.periods.length >= 2) {
       const sorted = [...summary.periods].sort((a, b) =>
-        a.period.localeCompare(b.period)
+        a.period.localeCompare(b.period),
       );
       const current = sorted[sorted.length - 1];
       const previous = sorted[sorted.length - 2];
       const change =
         ((current.net - previous.net) / Math.abs(previous.net)) * 100;
 
-      insights.push({
+      newInsights.push({
         type: change >= 0 ? "positive" : "negative",
         icon: change >= 0 ? TrendingUp : TrendingDown,
         title: "Period Change",
@@ -253,13 +243,13 @@ const FinancialSummary = () => {
       });
     }
 
-    setInsights(insights);
+    setInsights(newInsights);
   };
 
-  const togglePeriodExpand = (period) => {
+  const togglePeriodExpand = (periodKey) => {
     setExpandedPeriods((prev) => ({
       ...prev,
-      [period]: !prev[period],
+      [periodKey]: !prev[periodKey],
     }));
   };
 
@@ -272,28 +262,28 @@ const FinancialSummary = () => {
     doc.text(
       `Period: ${period.charAt(0).toUpperCase() + period.slice(1)}`,
       14,
-      30
+      30,
     );
     doc.text(
       `Total Inflow: ₦${formatCurrency(summary.totalInflow || 0)}`,
       14,
-      38
+      38,
     );
     doc.text(
       `Total Outflow: ₦${formatCurrency(summary.totalOutflow || 0)}`,
       14,
-      46
+      46,
     );
     doc.text(
       `Net: ₦${formatCurrency(summary.totalInflow - summary.totalOutflow || 0)}`,
       14,
-      54
+      54,
     );
 
     doc.text("Period Breakdown:", 14, 68);
     let yPos = 76;
 
-    (summary.periods || []).forEach((p, index) => {
+    (summary.periods || []).forEach((p) => {
       if (yPos > 270) {
         doc.addPage();
         yPos = 20;
@@ -301,7 +291,7 @@ const FinancialSummary = () => {
       doc.text(
         `${p.period}: Inflow ₦${formatCurrency(p.inflow)}, Outflow ₦${formatCurrency(p.outflow)}, Net ₦${formatCurrency(p.net)}, Cash: ${p.paymentMethods?.Cash || 0}, Bank: ${p.paymentMethods?.Bank || 0}`,
         14,
-        yPos
+        yPos,
       );
       yPos += 8;
     });
@@ -344,22 +334,17 @@ const FinancialSummary = () => {
 
   if (loading) {
     return (
-      <section
-        id="blog-details-loading"
-        className="flex flex-col items-center justify-center min-h-screen bg-white py-20"
-      >
-        <div className="flex flex-col items-center justify-center">
-          <div className="flex space-x-2">
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse"></span>
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-200"></span>
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-400"></span>
-          </div>
+      <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
+        <div className="flex space-x-2">
+          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse"></span>
+          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-200"></span>
+          <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-400"></span>
         </div>
       </section>
     );
   }
 
-  const netBalance = summary.totalInflow - summary.totalOutflow;
+  const netBalance = (summary.totalInflow || 0) - (summary.totalOutflow || 0);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-600">
@@ -671,7 +656,7 @@ const FinancialSummary = () => {
                           <tbody>
                             {p.transactions
                               .sort(
-                                (a, b) => new Date(a.date) - new Date(b.date)
+                                (a, b) => new Date(a.date) - new Date(b.date),
                               )
                               .map((t, idx) => (
                                 <tr

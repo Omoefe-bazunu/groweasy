@@ -1,16 +1,6 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
-import { useSubscription } from "../context/SubscriptionContext"; // Added Subscription Context
-import { db } from "../lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
+import { useSubscription } from "../context/SubscriptionContext";
 import {
   Search,
   Calendar,
@@ -18,15 +8,18 @@ import {
   Plus,
   Download,
   Trash2,
-  Lock, // Added Lock icon
+  Lock,
+  Loader2,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import api from "../lib/api";
 
 const InvoicesList = () => {
   const { user } = useUser();
-  const { isPaid } = useSubscription(); // Get subscription status
+  const { isPaid } = useSubscription();
+
   const [invoices, setInvoices] = useState([]);
   const [filteredInvoices, setFilteredInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,35 +27,25 @@ const InvoicesList = () => {
   const [searchDate, setSearchDate] = useState("");
   const [downloading, setDownloading] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [showLimitModal, setShowLimitModal] = useState(false); // Modal state
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   useEffect(() => {
     fetchInvoices();
   }, [user]);
-
   useEffect(() => {
     filterInvoices();
   }, [searchText, searchDate, invoices]);
 
+  // ✅ Fetch from backend
   const fetchInvoices = async () => {
     if (!user) return;
-
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "invoices"),
-        where("userId", "==", user.uid),
-        orderBy("createdAt", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      const invoicesData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setInvoices(invoicesData);
-      setFilteredInvoices(invoicesData);
-    } catch (error) {
-      console.error("Error fetching invoices:", error);
+      const res = await api.get("/invoices");
+      setInvoices(res.data.invoices);
+      setFilteredInvoices(res.data.invoices);
+    } catch (err) {
+      console.error("Error fetching invoices:", err);
       toast.error("Failed to load invoices");
     } finally {
       setLoading(false);
@@ -71,97 +54,70 @@ const InvoicesList = () => {
 
   const filterInvoices = () => {
     let filtered = [...invoices];
-
     if (searchText) {
       filtered = filtered.filter(
-        (invoice) =>
-          invoice.businessName
+        (inv) =>
+          inv.businessName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.address?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.invoiceNumber?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.clientName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.clientContact?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.clientLocation
             ?.toLowerCase()
             .includes(searchText.toLowerCase()) ||
-          invoice.address?.toLowerCase().includes(searchText.toLowerCase()) ||
-          invoice.invoiceNumber
+          inv.clientOccupation
             ?.toLowerCase()
             .includes(searchText.toLowerCase()) ||
-          invoice.clientName
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          invoice.clientContact
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          invoice.clientLocation
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          invoice.clientOccupation
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          invoice.accountName
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          invoice.accountNumber
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase()) ||
-          invoice.bankName?.toLowerCase().includes(searchText.toLowerCase()) ||
-          invoice.signatureName
-            ?.toLowerCase()
-            .includes(searchText.toLowerCase())
+          inv.accountName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.accountNumber?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.bankName?.toLowerCase().includes(searchText.toLowerCase()) ||
+          inv.signatureName?.toLowerCase().includes(searchText.toLowerCase()),
       );
     }
-
     if (searchDate) {
-      filtered = filtered.filter((invoice) => invoice.date === searchDate);
+      filtered = filtered.filter((inv) => inv.date === searchDate);
     }
-
     setFilteredInvoices(filtered);
   };
 
-  const formatCurrency = (value) => {
-    return parseFloat(value).toLocaleString("en-NG", {
+  const formatCurrency = (value) =>
+    parseFloat(value || 0).toLocaleString("en-NG", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  };
 
-  const deleteInvoice = async (invoiceId) => {
-    // --- LOCK CHECK ---
+  // ✅ Delete via backend
+  const deleteInvoice = async (id) => {
     if (!isPaid) {
       setShowLimitModal(true);
       return;
     }
+    if (!window.confirm("Delete this invoice? This cannot be undone.")) return;
 
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this invoice? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
-
-    setDeleting(invoiceId);
+    setDeleting(id);
     try {
-      await deleteDoc(doc(db, "invoices", invoiceId));
-      setInvoices(invoices.filter((inv) => inv.id !== invoiceId));
-      setFilteredInvoices(
-        filteredInvoices.filter((inv) => inv.id !== invoiceId)
-      );
+      await api.delete(`/invoices/${id}`);
+      setInvoices((prev) => prev.filter((inv) => inv.id !== id));
       toast.success("Invoice deleted successfully!");
-    } catch (error) {
-      console.error("Error deleting invoice:", error);
-      toast.error("Failed to delete invoice");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error("Failed to delete invoice");
+      }
     } finally {
       setDeleting(null);
     }
   };
 
+  // ── Download helpers (client-side only) ──────────────────────────────────
   const downloadAsImage = async (invoice) => {
     setDownloading(invoice.id);
     try {
-      const invoiceHTML = generateInvoiceHTML(invoice);
       const tempDiv = document.createElement("div");
-      tempDiv.innerHTML = invoiceHTML;
-      tempDiv.style.position = "absolute";
-      tempDiv.style.left = "-9999px";
+      tempDiv.innerHTML = generateInvoiceHTML(invoice);
+      tempDiv.style.cssText = "position:absolute;left:-9999px;";
       document.body.appendChild(tempDiv);
-
       const canvas = await html2canvas(tempDiv, {
         scale: 2,
         useCORS: true,
@@ -172,11 +128,9 @@ const InvoicesList = () => {
       link.href = canvas.toDataURL("image/png");
       link.download = `invoice_${invoice.invoiceNumber || invoice.date}.png`;
       link.click();
-
       document.body.removeChild(tempDiv);
-      toast.success("Invoice downloaded as image!");
-    } catch (error) {
-      console.error("Error downloading image:", error);
+      toast.success("Downloaded as image!");
+    } catch {
       toast.error("Failed to download image");
     } finally {
       setDownloading(null);
@@ -186,13 +140,10 @@ const InvoicesList = () => {
   const downloadAsPDF = async (invoice) => {
     setDownloading(invoice.id);
     try {
-      const invoiceHTML = generateInvoiceHTML(invoice);
       const tempDiv = document.createElement("div");
-      tempDiv.innerHTML = invoiceHTML;
-      tempDiv.style.position = "absolute";
-      tempDiv.style.left = "-9999px";
+      tempDiv.innerHTML = generateInvoiceHTML(invoice);
+      tempDiv.style.cssText = "position:absolute;left:-9999px;";
       document.body.appendChild(tempDiv);
-
       const canvas = await html2canvas(tempDiv, {
         scale: 2,
         useCORS: true,
@@ -200,252 +151,119 @@ const InvoicesList = () => {
         logging: false,
       });
       const imgData = canvas.toDataURL("image/png");
-
       const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.addImage(
+        imgData,
+        "PNG",
+        0,
+        0,
+        imgWidth,
+        (canvas.height * imgWidth) / canvas.width,
+      );
       pdf.save(`invoice_${invoice.invoiceNumber || invoice.date}.pdf`);
-
       document.body.removeChild(tempDiv);
-      toast.success("Invoice downloaded as PDF!");
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
+      toast.success("Downloaded as PDF!");
+    } catch {
       toast.error("Failed to download PDF");
     } finally {
       setDownloading(null);
     }
   };
 
-  const generateInvoiceHTML = (invoice) => {
-    return `
-      <div style="width: 800px; padding: 40px; font-family: Arial, sans-serif; background: white; color: black;">
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; border-bottom: 3px solid ${
-          invoice.brandColor || "#000"
-        }; padding-bottom: 16px;">
-          <div style="flex: 1;">
-            <h1 style="font-size: 24px; font-weight: bold; color: ${
-              invoice.brandColor || "#000"
-            }; margin: 0;">
-              ${invoice.businessName || "Business Name"}
-            </h1>
-            <p style="font-size: 14px; color: #666; margin: 4px 0;">
-              ${invoice.address || "Address"}
-            </p>
-            ${
-              invoice.contactEmail
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${invoice.contactEmail}</p>`
-                : ""
-            }
-            ${
-              invoice.contactNumber
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">${invoice.contactNumber}</p>`
-                : ""
-            }
-          </div>
-          <div style="text-align: right;">
-            <h2 style="font-size: 20px; font-weight: bold; color: ${
-              invoice.brandColor || "#000"
-            }; margin: 0;">INVOICE</h2>
-            ${
-              invoice.invoiceNumber
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;">#${invoice.invoiceNumber}</p>`
-                : ""
-            }
-            <p style="font-size: 14px; color: #666; margin: 4px 0;">Date: ${
-              invoice.date
-            }</p>
-          </div>
+  const generateInvoiceHTML = (invoice) => `
+    <div style="width:800px;padding:40px;font-family:Arial,sans-serif;background:white;color:black;">
+      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:24px;border-bottom:3px solid ${invoice.brandColor || "#000"};padding-bottom:16px;">
+        <div style="flex:1;">
+          <h1 style="font-size:24px;font-weight:bold;color:${invoice.brandColor || "#000"};margin:0;">${invoice.businessName || "Business Name"}</h1>
+          <p style="font-size:14px;color:#666;margin:4px 0;">${invoice.address || "Address"}</p>
+          ${invoice.contactEmail ? `<p style="font-size:14px;color:#666;margin:4px 0;">${invoice.contactEmail}</p>` : ""}
+          ${invoice.contactNumber ? `<p style="font-size:14px;color:#666;margin:4px 0;">${invoice.contactNumber}</p>` : ""}
         </div>
-
-        ${
-          invoice.clientName ||
-          invoice.clientContact ||
-          invoice.clientLocation ||
-          invoice.clientOccupation
-            ? `
-          <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
-            <h3 style="font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">CLIENT INFORMATION</h3>
-            ${
-              invoice.clientName
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Name:</span> ${invoice.clientName}</p>`
-                : ""
-            }
-            ${
-              invoice.clientContact
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Contact:</span> ${invoice.clientContact}</p>`
-                : ""
-            }
-            ${
-              invoice.clientLocation
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Location:</span> ${invoice.clientLocation}</p>`
-                : ""
-            }
-            ${
-              invoice.clientOccupation
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Occupation:</span> ${invoice.clientOccupation}</p>`
-                : ""
-            }
-          </div>
-        `
-            : ""
-        }
-
-        ${
-          invoice.accountName || invoice.accountNumber || invoice.bankName
-            ? `
-          <div style="margin-bottom: 24px; padding: 16px; background-color: #f5f5f5; border-radius: 8px;">
-            <h3 style="font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">BANK DETAILS</h3>
-            ${
-              invoice.accountName
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Name:</span> ${invoice.accountName}</p>`
-                : ""
-            }
-            ${
-              invoice.accountNumber
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Account Number:</span> ${invoice.accountNumber}</p>`
-                : ""
-            }
-            ${
-              invoice.bankName
-                ? `<p style="font-size: 14px; color: #666; margin: 4px 0;"><span style="font-weight: 500;">Bank Name:</span> ${invoice.bankName}</p>`
-                : ""
-            }
-          </div>
-        `
-            : ""
-        }
-
-        <table style="width: 100%; font-size: 14px; margin-bottom: 16px; border-collapse: collapse;">
-          <thead>
-            <tr style="background-color: ${
-              invoice.brandColor || "#000"
-            }; color: white;">
-              <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Description</th>
-              <th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Qty</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Unit Price</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Amount</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Discount</th>
-              <th style="padding: 8px; text-align: right; border: 1px solid #ddd;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${invoice.items
-              ?.map(
-                (item) => `
-              <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 8px; text-align: left; border: 1px solid #ddd;">${
-                  item.description || "-"
-                }</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${
-                  item.qty || "-"
-                }</td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${
-                    item.unitPrice
-                      ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${
-                    item.qty && item.unitPrice
-                      ? `₦${(
-                          parseFloat(item.qty) * parseFloat(item.unitPrice)
-                        ).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-                <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">
-                  ${
-                    item.discount
-                      ? `₦${parseFloat(item.discount).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-                <td style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">
-                  ${
-                    item.qty && item.unitPrice
-                      ? `₦${(
-                          parseFloat(item.qty) * parseFloat(item.unitPrice) -
-                          (parseFloat(item.discount) || 0)
-                        ).toLocaleString("en-NG", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`
-                      : "-"
-                  }
-                </td>
-              </tr>
-            `
-              )
-              .join("")}
-          </tbody>
-          <tfoot>
-            <tr style="background-color: #f5f5f5;">
-              <td colspan="5" style="padding: 8px; text-align: right; font-weight: bold; border: 1px solid #ddd;">Total Due:</td>
-              <td style="padding: 8px; text-align: right; font-weight: bold; color: ${
-                invoice.brandColor || "#000"
-              }; border: 1px solid #ddd;">₦${parseFloat(
-                invoice.total
-              ).toLocaleString("en-NG", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}</td>
-            </tr>
-            ${
-              invoice.dueDate
-                ? `
-              <tr>
-                <td colspan="5" style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">Due Date:</td>
-                <td style="padding: 8px; text-align: right; font-weight: 600; border: 1px solid #ddd;">${invoice.dueDate}</td>
-              </tr>
-            `
-                : ""
-            }
-          </tfoot>
-        </table>
-
-        ${
-          invoice.signatureName || invoice.signatoryPosition
-            ? `
-          <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #ddd;">
-            <p style="font-size: 14px; font-weight: 600; margin: 0;">${
-              invoice.signatureName || ""
-            }</p>
-            <p style="font-size: 12px; color: #666; margin: 4px 0;">${
-              invoice.signatoryPosition || ""
-            }</p>
-          </div>
-        `
-            : ""
-        }
+        <div style="text-align:right;">
+          <h2 style="font-size:20px;font-weight:bold;color:${invoice.brandColor || "#000"};margin:0;">INVOICE</h2>
+          ${invoice.invoiceNumber ? `<p style="font-size:14px;color:#666;margin:4px 0;">#${invoice.invoiceNumber}</p>` : ""}
+          <p style="font-size:14px;color:#666;margin:4px 0;">Date: ${invoice.date}</p>
+        </div>
       </div>
-    `;
-  };
+      ${
+        invoice.clientName ||
+        invoice.clientContact ||
+        invoice.clientLocation ||
+        invoice.clientOccupation
+          ? `
+        <div style="margin-bottom:24px;padding:16px;background-color:#f5f5f5;border-radius:8px;">
+          <h3 style="font-size:14px;font-weight:600;color:#666;margin-bottom:8px;">CLIENT INFORMATION</h3>
+          ${invoice.clientName ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:500;">Name:</span> ${invoice.clientName}</p>` : ""}
+          ${invoice.clientContact ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:500;">Contact:</span> ${invoice.clientContact}</p>` : ""}
+          ${invoice.clientLocation ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:500;">Location:</span> ${invoice.clientLocation}</p>` : ""}
+          ${invoice.clientOccupation ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:500;">Occupation:</span> ${invoice.clientOccupation}</p>` : ""}
+        </div>`
+          : ""
+      }
+      ${
+        invoice.accountName || invoice.accountNumber || invoice.bankName
+          ? `
+        <div style="margin-bottom:24px;padding:16px;background-color:#f5f5f5;border-radius:8px;">
+          <h3 style="font-size:14px;font-weight:600;color:#666;margin-bottom:8px;">BANK DETAILS</h3>
+          ${invoice.accountName ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:500;">Account Name:</span> ${invoice.accountName}</p>` : ""}
+          ${invoice.accountNumber ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:500;">Account Number:</span> ${invoice.accountNumber}</p>` : ""}
+          ${invoice.bankName ? `<p style="font-size:14px;color:#666;margin:4px 0;"><span style="font-weight:500;">Bank Name:</span> ${invoice.bankName}</p>` : ""}
+        </div>`
+          : ""
+      }
+      <table style="width:100%;font-size:14px;margin-bottom:16px;border-collapse:collapse;">
+        <thead>
+          <tr style="background-color:${invoice.brandColor || "#000"};color:white;">
+            <th style="padding:8px;text-align:left;border:1px solid #ddd;">Description</th>
+            <th style="padding:8px;text-align:center;border:1px solid #ddd;">Qty</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Unit Price</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Amount</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Discount</th>
+            <th style="padding:8px;text-align:right;border:1px solid #ddd;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(invoice.items || [])
+            .map(
+              (item) => `
+            <tr style="border-bottom:1px solid #ddd;">
+              <td style="padding:8px;text-align:left;border:1px solid #ddd;">${item.description || "-"}</td>
+              <td style="padding:8px;text-align:center;border:1px solid #ddd;">${item.qty || "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.unitPrice ? `₦${parseFloat(item.unitPrice).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+              <td style="padding:8px;text-align:right;border:1px solid #ddd;">${item.discount ? `₦${parseFloat(item.discount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+              <td style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">${item.qty && item.unitPrice ? `₦${(parseFloat(item.qty) * parseFloat(item.unitPrice) - (parseFloat(item.discount) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}</td>
+            </tr>`,
+            )
+            .join("")}
+        </tbody>
+        <tfoot>
+          <tr style="background-color:#f5f5f5;">
+            <td colspan="5" style="padding:8px;text-align:right;font-weight:bold;border:1px solid #ddd;">Total Due:</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;color:${invoice.brandColor || "#000"};border:1px solid #ddd;">₦${parseFloat(invoice.total).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          </tr>
+          ${invoice.dueDate ? `<tr><td colspan="5" style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">Due Date:</td><td style="padding:8px;text-align:right;font-weight:600;border:1px solid #ddd;">${invoice.dueDate}</td></tr>` : ""}
+        </tfoot>
+      </table>
+      ${
+        invoice.signatureName || invoice.signatoryPosition
+          ? `
+        <div style="margin-top:32px;padding-top:24px;border-top:1px solid #ddd;">
+          <p style="font-size:14px;font-weight:600;margin:0;">${invoice.signatureName || ""}</p>
+          <p style="font-size:12px;color:#666;margin:4px 0;">${invoice.signatoryPosition || ""}</p>
+        </div>`
+          : ""
+      }
+    </div>`;
 
   if (loading) {
     return (
-      <section
-        id="blog-details-loading"
-        className="flex flex-col items-center justify-center min-h-screen bg-white py-20"
-      >
-        <div className="flex flex-col items-center justify-center">
-          <div className="flex space-x-2">
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse"></span>
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-200"></span>
-            <span className="h-3 w-3 bg-blue-600 rounded-full animate-pulse delay-400"></span>
-          </div>
+      <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
+        <div className="flex space-x-2">
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-200" />
+          <span className="h-3 w-3 bg-[#5247bf] rounded-full animate-pulse delay-400" />
         </div>
       </section>
     );
@@ -462,39 +280,38 @@ const InvoicesList = () => {
           </div>
           <button
             onClick={() => (window.location.href = "/invoices")}
-            className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
+            className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-[#4238a6] transition-colors"
           >
-            <Plus className="w-5 h-5" />
-            Create Invoice
+            <Plus className="w-5 h-5" /> Create Invoice
           </button>
         </div>
 
-        {/* Search and Filter */}
+        {/* Search */}
         <div className="bg-white rounded-xl shadow-md p-4 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search by business name, invoice number, client info, bank details, or signatory..."
+                placeholder="Search by business name, invoice number, client, bank details..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
               />
             </div>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="date"
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
               />
             </div>
           </div>
         </div>
 
-        {/* Invoices Grid */}
+        {/* Grid */}
         {filteredInvoices.length === 0 ? (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
             <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -509,7 +326,7 @@ const InvoicesList = () => {
             {!searchText && !searchDate && (
               <button
                 onClick={() => (window.location.href = "/invoices")}
-                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-blue-900 transition-colors"
+                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-[#4238a6] transition-colors"
               >
                 Create Your First Invoice
               </button>
@@ -537,15 +354,15 @@ const InvoicesList = () => {
 
                   <div className="space-y-2 mb-4">
                     {invoice.clientName && (
-                      <div className="flex items-center text-sm text-gray-600">
+                      <div className="text-sm text-gray-600">
                         <span className="font-semibold">Client: </span>
-                        <span className="ml-1">{invoice.clientName}</span>
+                        {invoice.clientName}
                       </div>
                     )}
                     {invoice.invoiceNumber && (
-                      <div className="flex items-center text-sm text-gray-600">
-                        <span className="font-semibold">Invoice: </span>
-                        <span className="ml-1">#{invoice.invoiceNumber}</span>
+                      <div className="text-sm text-gray-600">
+                        <span className="font-semibold">Invoice: </span>#
+                        {invoice.invoiceNumber}
                       </div>
                     )}
                     <div className="flex items-center text-sm text-gray-600">
@@ -554,8 +371,8 @@ const InvoicesList = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">
-                        {invoice.items?.filter((item) => item.description)
-                          .length || 0}{" "}
+                        {invoice.items?.filter((i) => i.description).length ||
+                          0}{" "}
                         item(s)
                       </span>
                       <span
@@ -575,10 +392,15 @@ const InvoicesList = () => {
                       invoice.accountNumber ||
                       invoice.bankName) && (
                       <div className="text-sm">
-                        <span className="text-gray-600">Bank Details: </span>
+                        <span className="text-gray-600">Bank: </span>
                         <span className="font-semibold">
-                          {invoice.accountName || ""}{" "}
-                          {invoice.accountNumber || ""} {invoice.bankName || ""}
+                          {[
+                            invoice.accountName,
+                            invoice.accountNumber,
+                            invoice.bankName,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </span>
                       </div>
                     )}
@@ -614,12 +436,11 @@ const InvoicesList = () => {
                       disabled={
                         downloading === invoice.id || deleting === invoice.id
                       }
-                      className="flex-1 flex items-center justify-center gap-1 bg-[#5247bf] hover:bg-blue-900 text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-1 bg-[#5247bf] hover:bg-[#4238a6] text-white text-sm font-medium py-2 rounded transition-colors disabled:opacity-50"
                     >
                       <Download className="w-4 h-4" />
                       {downloading === invoice.id ? "..." : "PDF"}
                     </button>
-                    {/* Updated Delete Button */}
                     <button
                       onClick={() => deleteInvoice(invoice.id)}
                       disabled={
@@ -632,14 +453,15 @@ const InvoicesList = () => {
                           ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                           : "bg-red-100 hover:bg-red-200 text-red-700"
                       } disabled:opacity-70`}
-                      title={!isPaid ? "Upgrade to delete items" : "Delete"}
+                      title={!isPaid ? "Upgrade to delete" : "Delete"}
                     >
-                      {!isPaid ? (
+                      {deleting === invoice.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : !isPaid ? (
                         <Lock className="w-4 h-4" />
                       ) : (
                         <Trash2 className="w-4 h-4" />
                       )}
-                      {deleting === invoice.id ? "..." : ""}
                     </button>
                   </div>
                 </div>
@@ -648,7 +470,6 @@ const InvoicesList = () => {
           </div>
         )}
 
-        {/* Results count */}
         {filteredInvoices.length > 0 && (
           <div className="mt-6 text-center text-gray-600">
             Showing {filteredInvoices.length} of {invoices.length} invoice(s)

@@ -9,7 +9,6 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  updateDoc,
   serverTimestamp,
   where,
   orderBy,
@@ -27,9 +26,6 @@ import {
   XCircle,
   Clock,
   Image,
-  ClipboardList,
-  Package,
-  Banknote,
   Settings,
   Save,
   Calendar,
@@ -37,12 +33,12 @@ import {
   Wallet,
   Check,
   Loader2,
-  Copy, // Added Copy Icon
+  Mail,
+  Trash2,
+  Copy,
 } from "lucide-react";
 import { toast } from "react-toastify";
-
-// Production API URL
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import api from "../lib/api"; // ✅ centralized API utility
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -56,7 +52,7 @@ export default function AdminDashboard() {
   // Data States
   const [users, setUsers] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
-  const [allSubscriptions, setAllSubscriptions] = useState({});
+  const [contacts, setContacts] = useState([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState([]);
   const [referrers, setReferrers] = useState([]);
 
@@ -81,11 +77,11 @@ export default function AdminDashboard() {
     metrics: false,
     settings: true,
     referrals: false,
+    messages: false,
   });
 
-  const toggleSection = (section) => {
+  const toggleSection = (section) =>
     setSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -97,37 +93,32 @@ export default function AdminDashboard() {
 
   const handleExperts = () => navigate("/admin/add-expert");
 
-  // --- ADMIN AUTH ---
+  // ── Admin Auth ────────────────────────────────────────────────────────────
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     setModalError("");
     setLoading(true);
 
     try {
-      const adminDoc = await getDoc(doc(db, "admin", "adminAccess"));
-      if (!adminDoc.exists()) {
-        setModalError("Admin credentials not configured");
-        return;
-      }
+      await api.post("/admin/login", {
+        email: adminEmail.trim(),
+        password: adminPassword.trim(),
+      });
 
-      const data = adminDoc.data();
-      if (adminEmail === data.email && adminPassword === data.password) {
-        setIsAdmin(true);
-        setShowModal(false);
-      } else {
-        setModalError("Invalid email or password");
-      }
+      // ✅ Success — just open the dashboard
+      setIsAdmin(true);
+      setShowModal(false);
     } catch (err) {
-      setModalError("Login failed. Check connection.");
+      setModalError("Invalid email or password");
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Settings ──────────────────────────────────────────────────────────────
   const handleUpdateFee = async (e) => {
     e.preventDefault();
     if (!monthlyFee || monthlyFee < 0) return toast.warn("Invalid fee amount");
-
     setUpdatingFee(true);
     try {
       await setDoc(
@@ -137,45 +128,31 @@ export default function AdminDashboard() {
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
         },
-        { merge: true }
+        { merge: true },
       );
       toast.success("Subscription fee updated");
-    } catch (error) {
+    } catch {
       toast.error("Failed to update fee");
     } finally {
       setUpdatingFee(false);
     }
   };
 
-  // --- ACTIONS ---
+  // ── Actions — all use api utility, token attached automatically ───────────
 
   const approveSubscription = async (payment) => {
     if (!window.confirm(`Approve ${payment.plan} for ${payment.userEmail}?`))
       return;
-
     setProcessingId(payment.id);
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_URL}/admin/approve-payment`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          paymentId: payment.id,
-          userId: payment.userId,
-          amount: payment.amount,
-          plan: payment.plan,
-        }),
+      await api.post("/admin/approve-payment", {
+        paymentId: payment.id,
+        userId: payment.userId,
+        amount: payment.amount,
+        plan: payment.plan,
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Approval failed");
-
       toast.success("Subscription approved & commissions paid");
     } catch (err) {
-      console.error("Approval error:", err);
       toast.error(err.message || "Failed to approve payment");
     } finally {
       setProcessingId(null);
@@ -184,27 +161,11 @@ export default function AdminDashboard() {
 
   const rejectSubscription = async (paymentId) => {
     if (!window.confirm("Reject this payment? This cannot be undone.")) return;
-
     setProcessingId(paymentId);
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_URL}/admin/reject-payment`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          paymentId: paymentId,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Rejection failed");
-
+      await api.post("/admin/reject-payment", { paymentId });
       toast.info("Payment rejected");
     } catch (err) {
-      console.error("Rejection error:", err);
       toast.error(err.message || "Failed to reject payment");
     } finally {
       setProcessingId(null);
@@ -214,34 +175,20 @@ export default function AdminDashboard() {
   const handleApproveWithdrawal = async (request) => {
     if (
       !window.confirm(
-        `Mark ₦${request.amount.toLocaleString()} as PAID for ${request.userName}?`
+        `Mark ₦${request.amount.toLocaleString()} as PAID for ${request.userName}?`,
       )
     )
       return;
-
     setProcessingId(request.id);
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_URL}/admin/approve-withdrawal`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          withdrawalId: request.id,
-          userId: request.userId,
-          amount: request.amount,
-        }),
+      await api.post("/admin/approve-withdrawal", {
+        withdrawalId: request.id,
+        userId: request.userId,
+        amount: request.amount,
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Withdrawal failed");
-
       toast.success("Withdrawal processed successfully");
-    } catch (e) {
-      console.error("Withdrawal error:", e);
-      toast.error(e.message || "Failed to approve withdrawal");
+    } catch (err) {
+      toast.error(err.message || "Failed to approve withdrawal");
     } finally {
       setProcessingId(null);
     }
@@ -252,40 +199,54 @@ export default function AdminDashboard() {
       !window.confirm("Reject this withdrawal request? This cannot be undone.")
     )
       return;
-
     setProcessingId(withdrawalId);
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_URL}/admin/reject-withdrawal`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          withdrawalId: withdrawalId,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Rejection failed");
-
+      await api.post("/admin/reject-withdrawal", { withdrawalId });
       toast.info("Withdrawal rejected");
-    } catch (e) {
-      console.error("Rejection error:", e);
-      toast.error(e.message || "Failed to reject withdrawal");
+    } catch (err) {
+      toast.error(err.message || "Failed to reject withdrawal");
     } finally {
       setProcessingId(null);
     }
   };
 
-  // Helper to copy bank details
+  const fetchContacts = async () => {
+    try {
+      const res = await api.get("/contact");
+      setContacts(res.data);
+    } catch (err) {
+      console.error("Failed to fetch messages", err);
+    }
+  };
+
+  const deleteContact = async (id) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to permanently delete this message?",
+      )
+    )
+      return;
+
+    try {
+      // Calls DELETE /api/contact/MESSAGE_ID
+      await api.delete(`/contact/${id}`);
+
+      // Update local state to remove the message from view immediately
+      setContacts((prev) => prev.filter((c) => c.id !== id));
+
+      toast.success("Message deleted successfully");
+    } catch (err) {
+      console.error("Delete error:", err);
+      toast.error(err.response?.data?.error || "Failed to delete message");
+    }
+  };
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     toast.success("Bank details copied!");
   };
 
-  // --- HELPERS ---
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -296,71 +257,58 @@ export default function AdminDashboard() {
     });
   };
 
-  const calculateDaysLeft = (expiresAt) => {
-    if (!expiresAt) return 0;
-    const expiryDate = expiresAt.toDate
-      ? expiresAt.toDate()
-      : new Date(expiresAt);
-    const today = new Date();
-    const diffTime = expiryDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
+  // ✅ Works with ISO string (new system) — no more Firestore Timestamp assumed
+  const calculateDaysLeft = (expiryDate) => {
+    if (!expiryDate) return 0;
+    const expiry = new Date(expiryDate);
+    const diff = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
   };
 
-  // --- DATA FETCHING ---
+  // ── Data Fetching ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin) return;
 
-    // 1. Settings
+    // Settings
     getDoc(doc(db, "admin", "settings")).then((snap) => {
       if (snap.exists())
         setMonthlyFee(snap.data().monthlySubscriptionFee || 3000);
     });
 
-    // 2. Real-time Listeners
+    // Users — ✅ subscription now lives inside the user doc, no separate collection needed
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-      setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const userList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setUsers(userList);
 
-      const refs = [];
-      snap.forEach((doc) => {
-        const d = doc.data();
-        if (d.referralCount > 0 || d.walletBalance > 0 || d.referralCode) {
-          refs.push({ id: doc.id, ...d });
-        }
-      });
-      setReferrers(
-        refs.sort((a, b) => (b.walletBalance || 0) - (a.walletBalance || 0))
-      );
+      // Build referrers list from user docs directly
+      const refs = userList
+        .filter(
+          (u) => u.referralCount > 0 || u.walletBalance > 0 || u.referralCode,
+        )
+        .sort((a, b) => (b.walletBalance || 0) - (a.walletBalance || 0));
+      setReferrers(refs);
     });
 
+    // Pending payments
     const unsubPayments = onSnapshot(
       query(
         collection(db, "pendingPayments"),
-        where("status", "==", "pending")
+        where("status", "==", "pending"),
       ),
-      (snap) => {
-        setPendingPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      }
+      (snap) =>
+        setPendingPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     );
 
+    // Withdrawals
     const unsubWithdrawals = onSnapshot(
       query(collection(db, "withdrawals"), orderBy("requestedAt", "desc")),
-      (snap) => {
+      (snap) =>
         setWithdrawalRequests(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        );
-      }
+          snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        ),
     );
 
-    const unsubSubs = onSnapshot(collection(db, "subscriptions"), (snap) => {
-      const subsMap = {};
-      snap.forEach((doc) => {
-        subsMap[doc.id] = doc.data();
-      });
-      setAllSubscriptions(subsMap);
-    });
-
-    // 3. Static Metrics
+    // Metrics
     const fetchCounts = async () => {
       const cols = [
         "receipts",
@@ -373,7 +321,7 @@ export default function AdminDashboard() {
       ];
       try {
         const snaps = await Promise.all(
-          cols.map((c) => getDocs(collection(db, c)))
+          cols.map((c) => getDocs(collection(db, c))),
         );
         setTotalReceipts(snaps[0].size);
         setTotalInvoices(snaps[1].size);
@@ -387,26 +335,27 @@ export default function AdminDashboard() {
       }
     };
     fetchCounts();
+    fetchContacts();
 
     return () => {
       unsubUsers();
       unsubPayments();
       unsubWithdrawals();
-      unsubSubs();
     };
   }, [isAdmin]);
 
-  if (!user)
+  if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-xl">
+      <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#5247bf]" />
       </div>
     );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pt-10 pb-25 px-4 md:px-6">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* LOGIN MODAL */}
+        {/* ── Login Modal ─────────────────────────────────────────────────── */}
         {showModal && (
           <div className="fixed inset-0 text-gray-700 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
@@ -447,7 +396,7 @@ export default function AdminDashboard() {
                   disabled={loading}
                   className="w-full bg-[#5247bf] text-white py-3 rounded-lg font-semibold hover:bg-[#4238a6] disabled:bg-gray-400 flex justify-center items-center gap-2"
                 >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}{" "}
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {loading ? "Verifying..." : "Login as Admin"}
                 </button>
               </form>
@@ -461,7 +410,7 @@ export default function AdminDashboard() {
               Admin Dashboard
             </h1>
 
-            {/* --- REFERRAL MANAGEMENT --- */}
+            {/* ── Referral Management ──────────────────────────────────────── */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-yellow-400/20">
               <button
                 onClick={() => toggleSection("referrals")}
@@ -506,8 +455,6 @@ export default function AdminDashboard() {
                                 <p className="text-2xl font-bold text-[#5247bf] mb-3">
                                   ₦{req.amount.toLocaleString()}
                                 </p>
-
-                                {/* Bank Details with Copy */}
                                 <div className="flex items-start gap-2 bg-white border border-gray-300 p-3 rounded-lg max-w-md mb-2">
                                   <div className="flex-1">
                                     <p className="text-xs text-gray-500 uppercase font-semibold">
@@ -527,14 +474,11 @@ export default function AdminDashboard() {
                                     <Copy className="w-5 h-5" />
                                   </button>
                                 </div>
-
                                 <p className="text-xs text-gray-400">
                                   Requested:{" "}
-                                  {req.requestedAt?.toDate().toLocaleString()}
+                                  {req.requestedAt?.toDate?.().toLocaleString()}
                                 </p>
                               </div>
-
-                              {/* Action Buttons */}
                               <div className="flex gap-2 self-start lg:self-center">
                                 <button
                                   onClick={() => handleApproveWithdrawal(req)}
@@ -567,7 +511,7 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
-                  {/* Processed Withdrawals History */}
+                  {/* Withdrawal History */}
                   {withdrawalRequests.filter((r) => r.status !== "pending")
                     .length > 0 && (
                     <>
@@ -577,7 +521,7 @@ export default function AdminDashboard() {
                       <div className="space-y-3 mb-8">
                         {withdrawalRequests
                           .filter((r) => r.status !== "pending")
-                          .slice(0, 10) // Show last 10
+                          .slice(0, 10)
                           .map((req) => (
                             <div
                               key={req.id}
@@ -592,7 +536,7 @@ export default function AdminDashboard() {
                                 </p>
                                 <p className="text-xs text-gray-400">
                                   {formatDate(
-                                    req.processedAt || req.rejectedAt
+                                    req.processedAt || req.rejectedAt,
                                   )}
                                 </p>
                               </div>
@@ -611,7 +555,7 @@ export default function AdminDashboard() {
                     </>
                   )}
 
-                  {/* Top Referrers - Keep as is */}
+                  {/* Top Referrers */}
                   <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
                     Top Referrers
                   </h3>
@@ -665,7 +609,7 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* --- SUBSCRIPTION SETTINGS --- */}
+            {/* ── Subscription Settings ─────────────────────────────────────── */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
               <button
                 onClick={() => toggleSection("settings")}
@@ -698,20 +642,20 @@ export default function AdminDashboard() {
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <Save className="w-4 h-4" />
-                        )}{" "}
+                        )}
                         Save
                       </button>
                     </div>
                     <p className="text-sm text-gray-500 mt-2">
-                      Yearly plan will automatically be calculated as (Monthly
-                      Fee × 12).
+                      Yearly plan is automatically calculated as Monthly Fee ×
+                      12.
                     </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* --- PENDING PAYMENT PROOFS --- */}
+            {/* ── Pending Payment Proofs ────────────────────────────────────── */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
               <button
                 onClick={() => toggleSection("subscriptions")}
@@ -740,7 +684,11 @@ export default function AdminDashboard() {
                         </p>
                         <div className="mt-3">
                           <span
-                            className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${payment.plan === "yearly" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`}
+                            className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
+                              payment.plan === "yearly"
+                                ? "bg-orange-100 text-orange-800"
+                                : "bg-blue-100 text-blue-800"
+                            }`}
                           >
                             {payment.plan === "yearly" ? "YEARLY" : "MONTHLY"} •
                             ₦{payment.amount}
@@ -767,12 +715,13 @@ export default function AdminDashboard() {
                             <Loader2 className="w-5 h-5 animate-spin" />
                           ) : (
                             <CheckCircle className="w-5 h-5" />
-                          )}{" "}
+                          )}
                           Approve
                         </button>
                         <button
                           onClick={() => rejectSubscription(payment.id)}
-                          className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
+                          disabled={processingId === payment.id}
+                          className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center gap-2 disabled:bg-gray-400"
                         >
                           <XCircle className="w-5 h-5" /> Reject
                         </button>
@@ -787,8 +736,64 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
+            {/* ── Contact Messages ─────────────────────────────────────────── */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-indigo-400/20">
+              <button
+                onClick={() => toggleSection("messages")}
+                className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xl font-bold hover:opacity-90 transition"
+              >
+                <span className="flex items-center gap-3">
+                  <Mail className="w-6 h-6" /> User Messages ({contacts.length})
+                </span>
+                {sections.messages ? <ChevronUp /> : <ChevronDown />}
+              </button>
 
-            {/* --- METRICS --- */}
+              {sections.messages && (
+                <div className="p-6">
+                  {contacts.length === 0 ? (
+                    <p className="text-gray-500 italic text-center py-4">
+                      No messages received yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {contacts.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-indigo-300 transition shadow-sm"
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h4 className="font-bold text-gray-900 text-lg">
+                                {msg.name}
+                              </h4>
+                              <p className="text-sm text-[#5247bf] font-medium">
+                                {msg.email}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              <span className="text-xs text-gray-400">
+                                {new Date(msg.createdAt).toLocaleDateString()}
+                              </span>
+                              <button
+                                onClick={() => deleteContact(msg.id)}
+                                className="text-red-400 hover:text-red-600 p-1"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg border border-gray-100 text-gray-700 whitespace-pre-line text-sm">
+                            {msg.message}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Platform Metrics ──────────────────────────────────────────── */}
             <div className="bg-white rounded-xl shadow-md text-gray-700">
               <button
                 onClick={() => toggleSection("metrics")}
@@ -803,39 +808,44 @@ export default function AdminDashboard() {
               </button>
               {sections.metrics && (
                 <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <Users className="text-blue-600" />
-                    <div>
-                      <p className="text-sm">Users</p>
-                      <p className="font-bold">{users.length}</p>
+                  {[
+                    { label: "Users", value: users.length, icon: Users },
+                    { label: "Receipts", value: totalReceipts, icon: Receipt },
+                    { label: "Invoices", value: totalInvoices, icon: FileText },
+                    { label: "Tasks", value: totalTasks, icon: List },
+                    {
+                      label: "Quotations",
+                      value: totalQuotations,
+                      icon: FileText,
+                    },
+                    {
+                      label: "Inventory",
+                      value: totalInventory,
+                      icon: FileText,
+                    },
+                    { label: "Payrolls", value: totalPayrolls, icon: FileText },
+                    {
+                      label: "Financial Records",
+                      value: totalFinancialRecords,
+                      icon: FileText,
+                    },
+                  ].map((m, i) => (
+                    <div
+                      key={i}
+                      className="p-4 bg-gray-50 rounded-lg flex items-center gap-3"
+                    >
+                      <m.icon className="text-blue-600 w-5 h-5" />
+                      <div>
+                        <p className="text-sm text-gray-500">{m.label}</p>
+                        <p className="font-bold text-gray-900">{m.value}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <Receipt className="text-blue-600" />
-                    <div>
-                      <p className="text-sm">Receipts</p>
-                      <p className="font-bold">{totalReceipts}</p>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <FileText className="text-blue-600" />
-                    <div>
-                      <p className="text-sm">Invoices</p>
-                      <p className="font-bold">{totalInvoices}</p>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                    <List className="text-blue-600" />
-                    <div>
-                      <p className="text-sm">Tasks</p>
-                      <p className="font-bold">{totalTasks}</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* --- USERS SECTION --- */}
+            {/* ── Users Table ───────────────────────────────────────────────── */}
             <div className="bg-white rounded-xl shadow-md text-gray-700">
               <button
                 onClick={() => toggleSection("users")}
@@ -848,6 +858,7 @@ export default function AdminDashboard() {
                   <ChevronDown className="w-6 h-6" />
                 )}
               </button>
+
               {sections.users && (
                 <div className="p-4 border-t">
                   {users.length > 0 ? (
@@ -855,74 +866,82 @@ export default function AdminDashboard() {
                       <table className="w-full text-left">
                         <thead>
                           <tr className="bg-gray-100">
-                            <th className="p-3 text-sm font-semibold text-gray-600">
-                              Name
-                            </th>
-                            <th className="p-3 text-sm font-semibold text-gray-600">
-                              Email
-                            </th>
-                            <th className="p-3 text-sm font-semibold text-gray-600">
-                              Phone
-                            </th>
-                            <th className="p-3 text-sm font-semibold text-gray-600">
-                              Signed Up
-                            </th>
-                            <th className="p-3 text-sm font-semibold text-gray-600">
-                              Subscription
-                            </th>
-                            <th className="p-3 text-sm font-semibold text-gray-600">
-                              Days Left
-                            </th>
+                            {[
+                              "Name",
+                              "Email",
+                              "Phone",
+                              "Signed Up",
+                              "Subscription",
+                              "Days Left",
+                            ].map((h) => (
+                              <th
+                                key={h}
+                                className="p-3 text-sm font-semibold text-gray-600"
+                              >
+                                {h}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {users.map((user) => {
-                            const sub = allSubscriptions[user.id];
+                          {users.map((u) => {
+                            // ✅ Read subscription from user doc directly — new system
+                            const sub = u.subscription;
                             const isPro =
                               sub?.status === "active" &&
-                              calculateDaysLeft(sub.expiresAt) > 0;
+                              calculateDaysLeft(sub.expiryDate) > 0;
                             const daysLeft = isPro
-                              ? calculateDaysLeft(sub.expiresAt)
+                              ? calculateDaysLeft(sub.expiryDate)
                               : 0;
+
                             return (
-                              <tr key={user.id} className="border-t">
+                              <tr
+                                key={u.id}
+                                className="border-t hover:bg-gray-50"
+                              >
                                 <td className="p-3 text-sm">
-                                  {user.name || "N/A"}
+                                  {u.name || "N/A"}
                                 </td>
                                 <td className="p-3 text-sm">
-                                  {user.email || "N/A"}
+                                  {u.email || "N/A"}
                                 </td>
                                 <td className="p-3 text-sm">
-                                  {user.phoneNumber || "N/A"}
+                                  {u.phoneNumber || "N/A"}
                                 </td>
-                                <td className="p-3 text-sm flex items-center gap-2">
-                                  <Calendar className="w-4 h-4 text-gray-400" />{" "}
-                                  {formatDate(user.createdAt)}
+                                <td className="p-3 text-sm">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-4 h-4 text-gray-400" />
+                                    {formatDate(u.createdAt)}
+                                  </span>
                                 </td>
                                 <td className="p-3 text-sm">
                                   {isPro ? (
                                     <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold">
-                                      <ShieldCheck className="w-3 h-3" /> PRO (
-                                      {sub.type === "yearly"
-                                        ? "Yearly"
-                                        : "Monthly"}
-                                      )
+                                      <ShieldCheck className="w-3 h-3" />
+                                      {/* ✅ reads sub.plan not sub.type */}
+                                      PRO ({sub.plan || "Monthly"})
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-semibold">
-                                      Free
+                                      {sub?.status === "trial"
+                                        ? "Trial"
+                                        : "Free"}
                                     </span>
                                   )}
                                 </td>
                                 <td className="p-3 text-sm font-medium">
                                   {isPro ? (
                                     <span
-                                      className={`${daysLeft < 5 ? "text-red-500" : "text-gray-900"}`}
+                                      className={
+                                        daysLeft < 5
+                                          ? "text-red-500"
+                                          : "text-gray-900"
+                                      }
                                     >
                                       {daysLeft} days
                                     </span>
                                   ) : (
-                                    <span className="text-gray-400">-</span>
+                                    <span className="text-gray-400">—</span>
                                   )}
                                 </td>
                               </tr>
@@ -941,7 +960,7 @@ export default function AdminDashboard() {
             </div>
 
             <button
-              onClick={() => handleExperts()}
+              onClick={handleExperts}
               className="w-full flex justify-between cursor-pointer bg-white rounded-lg shadow-md items-center p-4 text-lg font-semibold text-blue-600 hover:bg-gray-50 transition"
             >
               Manage Documents Experts

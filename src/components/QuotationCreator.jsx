@@ -1,17 +1,9 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { db } from "../lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "react-toastify";
-import {
-  RotateCcw,
-  Save,
-  Lock,
-  Loader2,
-  LockIcon,
-  FileText,
-} from "lucide-react";
+import api from "../lib/api";
+import { RotateCcw, Save, Lock, Loader2, LockIcon } from "lucide-react";
 
 const COLLECTION_NAME = "quotations";
 
@@ -27,15 +19,14 @@ const QuotationCreator = () => {
     limit: 10,
   });
 
-  // Adapted from , added termsAndConditions and validUntil
-  const [formData, setFormData] = useState({
+  const defaultForm = {
     businessName: "",
     address: "",
     contactEmail: "",
     contactNumber: "",
     date: new Date().toISOString().split("T")[0],
-    quotationNumber: "", // Changed from invoiceNumber
-    brandColor: "#0ea5e9", // Default to a sky blue for Quotes to differentiate from Invoices
+    quotationNumber: "",
+    brandColor: "#0ea5e9",
     clientName: "",
     clientContact: "",
     clientLocation: "",
@@ -48,12 +39,14 @@ const QuotationCreator = () => {
     }),
     signatureName: "",
     signatoryPosition: "",
-    validUntil: "", // Changed from dueDate
-    termsAndConditions: "", // New feature for Quotes
+    validUntil: "",
+    termsAndConditions: "",
     accountName: "",
     accountNumber: "",
     bankName: "",
-  });
+  };
+
+  const [formData, setFormData] = useState(defaultForm);
 
   // Load free-tier usage count
   useEffect(() => {
@@ -73,12 +66,11 @@ const QuotationCreator = () => {
     setFormData((prev) => ({ ...prev, items: updatedItems }));
   };
 
-  const formatCurrency = (value) => {
-    return parseFloat(value || 0).toLocaleString("en-NG", {
+  const formatCurrency = (value) =>
+    parseFloat(value || 0).toLocaleString("en-NG", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  };
 
   const calculateAmount = (qty, unitPrice) =>
     (parseFloat(qty) || 0) * (parseFloat(unitPrice) || 0);
@@ -90,7 +82,7 @@ const QuotationCreator = () => {
     formData.items.reduce(
       (sum, item) =>
         sum + calculateFinalAmount(item.qty, item.unitPrice, item.discount),
-      0
+      0,
     );
 
   const handleSave = async () => {
@@ -98,6 +90,7 @@ const QuotationCreator = () => {
     if (!formData.businessName || !formData.address)
       return toast.error("Business name and address are required");
 
+    // ✅ Check write permission via backend before submitting
     const allowed = await canWriteTo(COLLECTION_NAME);
     if (!allowed) {
       setShowLimitModal(true);
@@ -106,74 +99,33 @@ const QuotationCreator = () => {
 
     setLoading(true);
     try {
-      const quotationData = {
-        userId: user.uid,
-        businessName: formData.businessName,
-        address: formData.address,
-        contactEmail: formData.contactEmail,
-        contactNumber: formData.contactNumber,
-        date: formData.date,
-        quotationNumber: formData.quotationNumber || "",
-        brandColor: formData.brandColor,
-        clientName: formData.clientName,
-        clientContact: formData.clientContact,
-        clientLocation: formData.clientLocation,
-        clientOccupation: formData.clientOccupation,
+      await api.post("/quotations", {
+        ...formData,
         items: formData.items.filter(
-          (i) => i.description && i.qty && i.unitPrice
+          (i) => i.description && i.qty && i.unitPrice,
         ),
-        signatureName: formData.signatureName,
-        signatoryPosition: formData.signatoryPosition,
-        validUntil: formData.validUntil || "",
-        termsAndConditions: formData.termsAndConditions || "",
-        accountName: formData.accountName || "",
-        accountNumber: formData.accountNumber || "",
-        bankName: formData.bankName || "",
         total: calculateTotal().toFixed(2),
-        status: "Pending", // Default status
-        createdAt: serverTimestamp(),
-      };
+      });
 
-      await addDoc(collection(db, COLLECTION_NAME), quotationData);
       toast.success("Quotation saved successfully!");
       handleReset();
 
-      // Refresh limit count
+      // Refresh limit count for free users
       if (!isPaid) getLimitStatus(COLLECTION_NAME).then(setLimitStatus);
-    } catch (error) {
-      console.error("Error saving quotation:", error);
-      toast.error("Failed to save quotation");
+    } catch (err) {
+      // ✅ Backend returns 403 when limit reached
+      if (err.response?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        toast.error(err.response?.data?.error || "Failed to save quotation");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
-    setFormData({
-      ...formData,
-      businessName: "",
-      address: "",
-      contactEmail: "",
-      contactNumber: "",
-      quotationNumber: "",
-      clientName: "",
-      clientContact: "",
-      clientLocation: "",
-      clientOccupation: "",
-      items: Array(10).fill({
-        description: "",
-        qty: "",
-        unitPrice: "",
-        discount: "",
-      }),
-      signatureName: "",
-      signatoryPosition: "",
-      validUntil: "",
-      termsAndConditions: "",
-      accountName: "",
-      accountNumber: "",
-      bankName: "",
-    });
+    setFormData(defaultForm);
     toast.info("Form cleared");
   };
 
@@ -201,45 +153,43 @@ const QuotationCreator = () => {
               Reset
             </button>
 
-            <div className="relative group">
-              <button
-                onClick={handleSave}
-                disabled={loading || (limitStatus.reached && !isPaid)}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition ${
-                  limitStatus.reached && !isPaid
-                    ? "bg-gray-400 cursor-not-allowed text-white"
-                    : "bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
-                }`}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Saving...
-                  </>
-                ) : limitStatus.reached && !isPaid ? (
-                  <>
-                    <LockIcon className="w-5 h-5" />
-                    Upgrade to Continue
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-5 h-5" />
-                    Save Quotation
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              onClick={handleSave}
+              disabled={loading || (limitStatus.reached && !isPaid)}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition ${
+                limitStatus.reached && !isPaid
+                  ? "bg-gray-400 cursor-not-allowed text-white"
+                  : "bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+              }`}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Saving...
+                </>
+              ) : limitStatus.reached && !isPaid ? (
+                <>
+                  <LockIcon className="w-5 h-5" />
+                  Upgrade to Continue
+                </>
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  Save Quotation
+                </>
+              )}
+            </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Form Side */}
+          {/* ── Form Side ─────────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
             <h2 className="text-xl font-semibold text-gray-900">
               Quotation Details
             </h2>
 
-            {/* Basic Info Block */}
+            {/* Basic Info */}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -269,7 +219,7 @@ const QuotationCreator = () => {
               </div>
             </div>
 
-            {/* Contact Grid */}
+            {/* Contact */}
             <div className="grid grid-cols-2 gap-4">
               <input
                 type="email"
@@ -289,7 +239,7 @@ const QuotationCreator = () => {
               />
             </div>
 
-            {/* Date & Color Grid */}
+            {/* Date & Color */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -451,39 +401,38 @@ const QuotationCreator = () => {
               </div>
             </div>
 
-            {/* Bank Details & Signature (Same as Invoice) */}
+            {/* Bank Details */}
             <div className="pt-4 border-t space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Bank Details (Optional)
               </h3>
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  name="accountName"
-                  placeholder="Account Name"
-                  value={formData.accountName}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9]"
-                />
-                <input
-                  type="text"
-                  name="accountNumber"
-                  placeholder="Account Number"
-                  value={formData.accountNumber}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9]"
-                />
-                <input
-                  type="text"
-                  name="bankName"
-                  placeholder="Bank Name"
-                  value={formData.bankName}
-                  onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9]"
-                />
-              </div>
+              <input
+                type="text"
+                name="accountName"
+                placeholder="Account Name"
+                value={formData.accountName}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9]"
+              />
+              <input
+                type="text"
+                name="accountNumber"
+                placeholder="Account Number"
+                value={formData.accountNumber}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9]"
+              />
+              <input
+                type="text"
+                name="bankName"
+                placeholder="Bank Name"
+                value={formData.bankName}
+                onChange={handleInputChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0ea5e9]"
+              />
             </div>
 
+            {/* Signatory */}
             <div className="pt-4 border-t">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Signatory
@@ -509,7 +458,7 @@ const QuotationCreator = () => {
             </div>
           </div>
 
-          {/* Preview Side - Adapted from */}
+          {/* ── Preview Side ───────────────────────────────────────────── */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Preview
@@ -562,7 +511,7 @@ const QuotationCreator = () => {
                 </div>
               </div>
 
-              {/* Client Info Section */}
+              {/* Client Info */}
               {(formData.clientName ||
                 formData.clientContact ||
                 formData.clientLocation) && (
@@ -591,7 +540,7 @@ const QuotationCreator = () => {
                 </div>
               )}
 
-              {/* Table */}
+              {/* Items Table */}
               <div className="overflow-x-auto">
                 <table className="min-w-[600px] w-full text-sm">
                   <thead>
@@ -668,7 +617,7 @@ const QuotationCreator = () => {
                 </table>
               </div>
 
-              {/* Terms & Conditions Section (New) */}
+              {/* Terms */}
               {formData.termsAndConditions && (
                 <div className="mt-6">
                   <h3 className="text-sm font-semibold text-gray-700 mb-1">
@@ -725,7 +674,7 @@ const QuotationCreator = () => {
         </div>
       </div>
 
-      {/* Reusing existing Upgrade Modal logic */}
+      {/* Upgrade Modal */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">

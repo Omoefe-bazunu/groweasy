@@ -2,15 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { db } from "../lib/firebase";
-import {
-  doc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-} from "firebase/firestore";
+import api from "../lib/api";
+import { doc, updateDoc } from "firebase/firestore";
 import {
   ArrowLeft,
   Copy,
@@ -52,29 +45,12 @@ const ReferralDashboard = () => {
 
     const fetchData = async () => {
       try {
-        // Fetch users referred by the current user using UID for security
-        const usersRef = collection(db, "users");
-        const qUsers = query(
-          usersRef,
-          where("referrerUid", "==", user.uid),
-          orderBy("createdAt", "desc")
-        );
-        const userSnaps = await getDocs(qUsers);
-        setReferralList(userSnaps.docs.map((d) => ({ id: d.id, ...d.data() })));
-
-        // Fetch withdrawal history
-        const withdrawRef = collection(db, "withdrawals");
-        const qWithdraw = query(
-          withdrawRef,
-          where("userId", "==", user.uid),
-          orderBy("requestedAt", "desc")
-        );
-        const withdrawSnaps = await getDocs(qWithdraw);
-        setWithdrawalHistory(
-          withdrawSnaps.docs.map((d) => ({ id: d.id, ...d.data() }))
-        );
-      } catch (error) {
-        console.error("Fetch Error:", error);
+        // ✅ Single backend call instead of two Firestore queries
+        const res = await api.get("/referral/dashboard");
+        setReferralList(res.data.referrals);
+        setWithdrawalHistory(res.data.withdrawals);
+      } catch (err) {
+        console.error("Fetch Error:", err.message);
       } finally {
         setLoadingList(false);
       }
@@ -86,57 +62,35 @@ const ReferralDashboard = () => {
   // 2. Withdrawal Submission via Backend API
   const handleSubmitWithdrawal = async (e) => {
     e.preventDefault();
-    if (!user || withdrawing) return;
+    if (withdrawing) return;
 
     const amountNum = Number(withdrawAmount);
     if (amountNum < 500) return toast.warn("Minimum withdrawal is ₦500");
 
     setWithdrawing(true);
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/referral/request-withdrawal`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            amount: amountNum,
-            bankDetails: bankDetails,
-          }),
-        }
-      );
+      // ✅ api utility handles token automatically
+      const res = await api.post("/referral/request-withdrawal", {
+        amount: amountNum,
+        bankDetails,
+      });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to submit request");
-      }
-
-      // FALLBACK: Use a string if result.message is missing
-      toast.success(
-        result.message || "Withdrawal request submitted successfully!"
-      );
-
+      toast.success(res.data.message);
       setShowForm(false);
       setWithdrawAmount("");
       setBankDetails("");
 
-      // Optimistic UI Update
       setWithdrawalHistory((prev) => [
         {
-          id: result.withdrawalId || Date.now().toString(),
+          id: res.data.withdrawalId,
           status: "pending",
           amount: amountNum,
           requestedAt: { toDate: () => new Date() },
         },
         ...prev,
       ]);
-    } catch (error) {
-      console.error("Submission error:", error);
-      toast.error(error.message || "Something went wrong");
+    } catch (err) {
+      toast.error(err.message || "Something went wrong");
     } finally {
       setWithdrawing(false);
     }
@@ -158,7 +112,7 @@ const ReferralDashboard = () => {
 
   const copyLink = () => {
     navigator.clipboard.writeText(
-      `${window.location.origin}/signup?ref=${userData.referralCode}`
+      `${window.location.origin}/signup?ref=${userData.referralCode}`,
     );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
