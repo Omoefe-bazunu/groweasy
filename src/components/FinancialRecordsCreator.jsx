@@ -14,9 +14,6 @@ import {
   Lock,
   LockIcon,
 } from "lucide-react";
-// ✅ Import Currency selection tools
-import CurrencySelector from "./Currency";
-import { SUPPORTED_CURRENCIES } from "../constants/currencies";
 
 const FinancialRecordsCreator = () => {
   const { user } = useUser();
@@ -40,8 +37,6 @@ const FinancialRecordsCreator = () => {
     inflow: "",
     outflow: "",
     paymentMethod: "Cash",
-    // ✅ Default to Naira
-    currency: SUPPORTED_CURRENCIES[0],
   });
 
   useEffect(() => {
@@ -96,7 +91,6 @@ const FinancialRecordsCreator = () => {
           totalOutflow: 0,
           startingBalance: runningBalance,
           dateLabel: getWeekRangeLabel(weekKey),
-          currency: record.currency || SUPPORTED_CURRENCIES[0],
         };
       }
 
@@ -131,10 +125,6 @@ const FinancialRecordsCreator = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleCurrencyChange = (currency) => {
-    setFormData((prev) => ({ ...prev, currency }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -155,7 +145,6 @@ const FinancialRecordsCreator = () => {
         inflow: parseFloat(formData.inflow) || 0,
         outflow: parseFloat(formData.outflow) || 0,
         paymentMethod: formData.paymentMethod,
-        currency: formData.currency,
       };
 
       if (editingRecord) {
@@ -174,7 +163,6 @@ const FinancialRecordsCreator = () => {
         inflow: "",
         outflow: "",
         paymentMethod: "Cash",
-        currency: SUPPORTED_CURRENCIES[0],
       });
       fetchRecords();
       if (!isPaid) getLimitStatus("financialRecords").then(setLimitStatus);
@@ -195,7 +183,6 @@ const FinancialRecordsCreator = () => {
       inflow: record.inflow || "",
       outflow: record.outflow || "",
       paymentMethod: record.paymentMethod || "Cash",
-      currency: record.currency || SUPPORTED_CURRENCIES[0],
     });
     setIsModalOpen(true);
   };
@@ -233,19 +220,16 @@ const FinancialRecordsCreator = () => {
         inflow: "",
         outflow: "",
         paymentMethod: "Cash",
-        currency: SUPPORTED_CURRENCIES[0],
       });
       setIsModalOpen(true);
     }
   };
 
-  const formatCurrency = (value, currencyObj) => {
-    const curr = currencyObj || SUPPORTED_CURRENCIES[0];
-    return new Intl.NumberFormat(curr.locale, {
-      style: "currency",
-      currency: curr.code,
+  const formatCurrency = (value) => {
+    return parseFloat(value).toLocaleString("en-NG", {
       minimumFractionDigits: 2,
-    }).format(parseFloat(value || 0));
+      maximumFractionDigits: 2,
+    });
   };
 
   if (loading) {
@@ -269,10 +253,10 @@ const FinancialRecordsCreator = () => {
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
                 Financial Records
               </h1>
-              <p className="text-gray-600 mt-1 font-medium">
+              <p className="text-gray-600 mt-1">
                 Track your income and expenses
                 {!isPaid && limitStatus.current > 0 && (
-                  <span className="ml-3 text-sm font-bold text-[#5247bf]">
+                  <span className="ml-3 text-sm font-medium">
                     • {limitStatus.current}/{limitStatus.limit} free records
                     used
                   </span>
@@ -282,9 +266,9 @@ const FinancialRecordsCreator = () => {
             <div className="relative group">
               <button
                 onClick={openCreateModal}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-colors ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
                   limitStatus.reached && !isPaid
-                    ? "bg-gray-400 cursor-not-allowed text-white"
+                    ? "bg-gray-400 cursor-not-allowed"
                     : "bg-[#5247bf] hover:bg-[#4238a6] text-white"
                 }`}
                 disabled={limitStatus.reached && !isPaid}
@@ -305,17 +289,17 @@ const FinancialRecordsCreator = () => {
           </div>
 
           {Object.keys(groupedRecords).length === 0 ? (
-            <div className="bg-white rounded-xl shadow-md p-12 text-center border border-gray-200">
+            <div className="bg-white rounded-xl shadow-md p-12 text-center">
               <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 No records yet
               </h3>
-              <p className="text-gray-600 mb-6 font-medium">
+              <p className="text-gray-600 mb-6">
                 Start tracking your finances by adding your first record
               </p>
               <button
                 onClick={openCreateModal}
-                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg font-bold hover:bg-[#4238a6] transition-colors"
+                className="bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-[#4238a6] transition-colors"
               >
                 Add Your First Record
               </button>
@@ -332,55 +316,54 @@ const FinancialRecordsCreator = () => {
                   return (
                     <div
                       key={weekKey}
-                      className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200"
+                      className="bg-white rounded-xl shadow-md overflow-hidden"
                     >
                       <div className="bg-gradient-to-r from-[#5247bf] to-[#4238a6] p-4 md:p-6">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                           <div>
-                            <h3 className="text-lg md:text-xl font-black text-white">
+                            <h3 className="text-lg md:text-xl font-bold text-white">
                               {weekData.dateLabel}
                             </h3>
-                            <p className="text-white/90 text-sm font-bold">
-                              Weekly Summary
+                            <p className="text-white/80 text-sm">
+                              Weekly Overview
                             </p>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                            <div className="bg-green-500/90 backdrop-blur-sm rounded-lg p-3 border border-green-400">
-                              <p className="text-white text-xs font-black uppercase mb-1">
-                                Inflow
-                              </p>
-                              <p className="text-white font-black text-sm md:text-base">
+                            <div className="bg-green-500 backdrop-blur rounded-lg p-3">
+                              <p className="text-white text-xs mb-1">Inflow</p>
+                              <p className="text-white font-bold text-sm md:text-base">
+                                ₦
                                 {formatCurrency(
-                                  weekData.totalInflow,
-                                  weekData.currency,
+                                  weekData.totalInflow.toFixed(2),
                                 )}
                               </p>
                             </div>
-                            <div className="bg-red-500/90 backdrop-blur-sm rounded-lg p-3 border border-red-400">
-                              <p className="text-white text-xs font-black uppercase mb-1">
-                                Outflow
-                              </p>
-                              <p className="text-white font-black text-sm md:text-base">
+                            <div className="bg-red-500 backdrop-blur rounded-lg p-3">
+                              <p className="text-white text-xs mb-1">Outflow</p>
+                              <p className="text-white font-bold text-sm md:text-base">
+                                ₦
                                 {formatCurrency(
-                                  weekData.totalOutflow,
-                                  weekData.currency,
+                                  weekData.totalOutflow.toFixed(2),
                                 )}
                               </p>
                             </div>
                             <div
-                              className={`backdrop-blur-sm rounded-lg p-3 border ${
-                                isProfit
-                                  ? "bg-green-600 border-green-500"
-                                  : "bg-red-700 border-red-600"
+                              className={`backdrop-blur rounded-lg p-3 ${
+                                isProfit ? "bg-green-500/70" : "bg-red-600/70"
                               }`}
                             >
-                              <p className="text-white text-xs font-black uppercase mb-1 flex items-center gap-1">
-                                Net {isProfit ? "Profit" : "Deficit"}
+                              <p className="text-white text-xs mb-1 flex items-center gap-1">
+                                Net{" "}
+                                {isProfit ? (
+                                  <TrendingUp className="w-3 h-3" />
+                                ) : (
+                                  <TrendingDown className="w-3 h-3" />
+                                )}
                               </p>
-                              <p className="font-black text-sm md:text-base text-white">
+                              <p className="font-bold text-sm md:text-base text-white">
+                                ₦
                                 {formatCurrency(
-                                  Math.abs(netBalance),
-                                  weekData.currency,
+                                  Math.abs(netBalance).toFixed(2),
                                 )}
                               </p>
                             </div>
@@ -390,32 +373,32 @@ const FinancialRecordsCreator = () => {
 
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                          <thead className="bg-gray-100 border-b border-gray-200">
+                          <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                              <th className="p-3 text-left font-black text-gray-700 min-w-[100px]">
+                              <th className="p-3 text-left font-semibold text-gray-700 min-w-[100px]">
                                 Date
                               </th>
-                              <th className="p-3 text-left font-black text-gray-700 min-w-[200px]">
+                              <th className="p-3 text-left font-semibold text-gray-700 min-w-[200px]">
                                 Details
                               </th>
-                              <th className="p-3 text-right font-black text-gray-700 min-w-[120px]">
+                              <th className="p-3 text-right font-semibold text-gray-700 min-w-[100px]">
                                 Inflow
                               </th>
-                              <th className="p-3 text-right font-black text-gray-700 min-w-[120px]">
+                              <th className="p-3 text-right font-semibold text-gray-700 min-w-[100px]">
                                 Outflow
                               </th>
-                              <th className="p-3 text-left font-black text-gray-700 min-w-[100px]">
+                              <th className="p-3 text-left font-semibold text-gray-700 min-w-[100px]">
                                 Method
                               </th>
-                              <th className="p-3 text-right font-black text-gray-700 min-w-[140px]">
+                              <th className="p-3 text-right font-semibold text-gray-700 min-w-[100px]">
                                 Balance
                               </th>
-                              <th className="p-3 text-center font-black text-gray-700 min-w-[100px]">
+                              <th className="p-3 text-center font-semibold text-gray-700 min-w-[100px]">
                                 Actions
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-100">
+                          <tbody>
                             {weekData.records
                               .sort(
                                 (a, b) => new Date(b.date) - new Date(a.date),
@@ -423,62 +406,56 @@ const FinancialRecordsCreator = () => {
                               .map((record) => (
                                 <tr
                                   key={record.id}
-                                  className="hover:bg-gray-50 transition-colors"
+                                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                                 >
-                                  <td className="p-3 text-gray-900 font-medium">
+                                  <td className="p-3 text-gray-700">
                                     {new Date(record.date).toLocaleDateString()}
                                   </td>
-                                  <td className="p-3 text-gray-900 font-medium">
+                                  <td className="p-3 text-gray-700">
                                     {record.details}
                                   </td>
-                                  <td className="p-3 text-right text-green-700 font-black">
-                                    {record.inflow > 0
-                                      ? formatCurrency(
-                                          record.inflow,
-                                          record.currency,
-                                        )
-                                      : "—"}
+                                  <td className="p-3 text-right text-green-600 font-semibold">
+                                    {record.inflow
+                                      ? `₦${formatCurrency(record.inflow.toFixed(2))}`
+                                      : "-"}
                                   </td>
-                                  <td className="p-3 text-right text-red-700 font-black">
-                                    {record.outflow > 0
-                                      ? formatCurrency(
-                                          record.outflow,
-                                          record.currency,
-                                        )
-                                      : "—"}
+                                  <td className="p-3 text-right text-red-600 font-semibold">
+                                    {record.outflow
+                                      ? `₦${formatCurrency(record.outflow.toFixed(2))}`
+                                      : "-"}
                                   </td>
-                                  <td className="p-3">
-                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-xs font-bold uppercase">
-                                      {record.paymentMethod}
-                                    </span>
+                                  <td className="p-3 text-gray-700">
+                                    {record.paymentMethod}
                                   </td>
-                                  <td className="p-3 text-right font-black text-gray-900">
-                                    {formatCurrency(
-                                      record.balance,
-                                      record.currency,
-                                    )}
+                                  <td className="p-3 text-right font-bold text-gray-900">
+                                    ₦{formatCurrency(record.balance.toFixed(2))}
                                   </td>
                                   <td className="p-3">
                                     <div className="flex items-center justify-center gap-2">
                                       <button
                                         onClick={() => handleEdit(record)}
-                                        className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-800 transition"
+                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-800 transition"
                                       >
-                                        <Edit2 className="w-3.5 h-3.5" />
+                                        <Edit2 className="w-4 h-4" />
                                       </button>
                                       <button
                                         onClick={() => handleDelete(record.id)}
                                         disabled={!isPaid}
-                                        className={`p-2 rounded-lg transition ${
+                                        title={
                                           !isPaid
-                                            ? "bg-gray-100 text-gray-400"
+                                            ? "Upgrade to delete items"
+                                            : "Delete"
+                                        }
+                                        className={`px-4 py-2 rounded transition flex items-center justify-center ${
+                                          !isPaid
+                                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                                             : "bg-red-600 text-white hover:bg-red-800"
                                         }`}
                                       >
                                         {!isPaid ? (
-                                          <Lock className="w-3.5 h-3.5" />
+                                          <Lock className="w-3 h-3" />
                                         ) : (
-                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <Trash2 className="w-4 h-4" />
                                         )}
                                       </button>
                                     </div>
@@ -494,55 +471,49 @@ const FinancialRecordsCreator = () => {
             </div>
           )}
 
-          {/* Create/Edit Modal - FIX: max-h and overflow added for mobile safety */}
+          {/* Create/Edit Modal */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-gray-100 max-h-[90dvh] flex flex-col">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 rounded-t-xl z-10">
+              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full flex flex-col max-h-[90dvh]">
+                {/* Sticky header */}
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center rounded-t-xl shrink-0">
                   <h2 className="text-2xl font-bold text-gray-900">
                     {editingRecord ? "Edit Record" : "Add Record"}
                   </h2>
                   <button
                     onClick={() => setIsModalOpen(false)}
-                    className="text-gray-500 hover:text-gray-900"
+                    className="text-gray-500 hover:text-gray-700"
                   >
                     <X className="w-6 h-6" />
                   </button>
                 </div>
 
-                <div className="p-6 overflow-y-auto">
+                {/* Scrollable form body */}
+                <div className="overflow-y-auto flex-1 p-6">
                   <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">
-                          Date *
-                        </label>
-                        <input
-                          type="date"
-                          name="date"
-                          value={formData.date}
-                          onChange={handleInputChange}
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900"
-                          required
-                        />
-                      </div>
-                      <CurrencySelector
-                        selectedCurrency={
-                          formData.currency || SUPPORTED_CURRENCIES[0]
-                        }
-                        onCurrencyChange={handleCurrencyChange}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date *
+                      </label>
+                      <input
+                        type="date"
+                        name="date"
+                        value={formData.date}
+                        onChange={handleInputChange}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                        required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         Details *
                       </label>
                       <textarea
                         name="details"
                         value={formData.details}
                         onChange={handleInputChange}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
                         rows="3"
                         placeholder="e.g., Client payment for Project X"
                         required
@@ -550,14 +521,14 @@ const FinancialRecordsCreator = () => {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         Payment Method *
                       </label>
                       <select
                         name="paymentMethod"
                         value={formData.paymentMethod}
                         onChange={handleInputChange}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-bold"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
                         required
                       >
                         <option value="Cash">Cash</option>
@@ -567,7 +538,7 @@ const FinancialRecordsCreator = () => {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
                           Inflow (+)
                         </label>
                         <input
@@ -575,14 +546,14 @@ const FinancialRecordsCreator = () => {
                           name="inflow"
                           value={formData.inflow}
                           onChange={handleInputChange}
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-black"
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
                           placeholder="0.00"
                           step="0.01"
                           min="0"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
                           Outflow (-)
                         </label>
                         <input
@@ -590,7 +561,7 @@ const FinancialRecordsCreator = () => {
                           name="outflow"
                           value={formData.outflow}
                           onChange={handleInputChange}
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-black"
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
                           placeholder="0.00"
                           step="0.01"
                           min="0"
@@ -598,17 +569,17 @@ const FinancialRecordsCreator = () => {
                       </div>
                     </div>
 
-                    <div className="flex gap-3 pt-4 sticky bottom-0 bg-white">
+                    <div className="flex gap-3 pt-2 pb-1">
                       <button
                         type="button"
                         onClick={() => setIsModalOpen(false)}
-                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-bold text-gray-700"
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 px-4 py-3 bg-[#5247bf] text-white rounded-lg hover:bg-[#4238a6] transition-colors font-bold shadow-md"
+                        className="flex-1 px-4 py-3 bg-[#5247bf] text-white rounded-lg hover:bg-[#4238a6] transition-colors font-medium"
                       >
                         {editingRecord ? "Update" : "Add"} Record
                       </button>
@@ -619,26 +590,27 @@ const FinancialRecordsCreator = () => {
             </div>
           )}
 
+          {/* Limit Reached Modal */}
           {showLimitModal && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center border border-gray-100">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center">
                 <Lock className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-                <h3 className="text-2xl font-black text-gray-900 mb-3">
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">
                   Feature Locked
                 </h3>
-                <p className="text-gray-700 mb-8 font-medium">
-                  Upgrade to Pro to manage unlimited financial records and keep
-                  your business bookkeeping organized.
+                <p className="text-gray-600 mb-8">
+                  Deleting records is available for <strong>Pro</strong> users
+                  only. Upgrade now to manage your records freely.
                 </p>
                 <button
                   onClick={() => (window.location.href = "/subscribe")}
-                  className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-black hover:bg-[#4238a6] transition shadow-lg"
+                  className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-semibold hover:bg-[#4238a6] transition"
                 >
                   Subscribe Now
                 </button>
                 <button
                   onClick={() => setShowLimitModal(false)}
-                  className="w-full mt-3 text-gray-500 font-bold hover:text-gray-700"
+                  className="w-full mt-3 text-gray-600 hover:text-gray-800"
                 >
                   Close
                 </button>
