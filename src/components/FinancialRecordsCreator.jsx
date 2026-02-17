@@ -96,7 +96,6 @@ const FinancialRecordsCreator = () => {
           totalOutflow: 0,
           startingBalance: runningBalance,
           dateLabel: getWeekRangeLabel(weekKey),
-          // Store the currency of the first record for this week's display
           currency: record.currency || SUPPORTED_CURRENCIES[0],
         };
       }
@@ -132,7 +131,6 @@ const FinancialRecordsCreator = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // ✅ Currency selection handler
   const handleCurrencyChange = (currency) => {
     setFormData((prev) => ({ ...prev, currency }));
   };
@@ -157,7 +155,6 @@ const FinancialRecordsCreator = () => {
         inflow: parseFloat(formData.inflow) || 0,
         outflow: parseFloat(formData.outflow) || 0,
         paymentMethod: formData.paymentMethod,
-        // ✅ Send currency to backend
         currency: formData.currency,
       };
 
@@ -242,7 +239,6 @@ const FinancialRecordsCreator = () => {
     }
   };
 
-  // ✅ Updated Dynamic Formatter
   const formatCurrency = (value, currencyObj) => {
     const curr = currencyObj || SUPPORTED_CURRENCIES[0];
     return new Intl.NumberFormat(curr.locale, {
@@ -498,11 +494,11 @@ const FinancialRecordsCreator = () => {
             </div>
           )}
 
-          {/* Create/Edit Modal */}
+          {/* Create/Edit Modal - FIX: max-h and overflow added for mobile safety */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-100">
-                <div className="flex justify-between items-center mb-6">
+              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-gray-100 max-h-[90dvh] flex flex-col">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 rounded-t-xl z-10">
                   <h2 className="text-2xl font-bold text-gray-900">
                     {editingRecord ? "Edit Record" : "Add Record"}
                   </h2>
@@ -514,110 +510,111 @@ const FinancialRecordsCreator = () => {
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-6 overflow-y-auto">
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">
+                          Date *
+                        </label>
+                        <input
+                          type="date"
+                          name="date"
+                          value={formData.date}
+                          onChange={handleInputChange}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900"
+                          required
+                        />
+                      </div>
+                      <CurrencySelector
+                        selectedCurrency={
+                          formData.currency || SUPPORTED_CURRENCIES[0]
+                        }
+                        onCurrencyChange={handleCurrencyChange}
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-1">
-                        Date *
+                        Details *
                       </label>
-                      <input
-                        type="date"
-                        name="date"
-                        value={formData.date}
+                      <textarea
+                        name="details"
+                        value={formData.details}
                         onChange={handleInputChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900"
+                        rows="3"
+                        placeholder="e.g., Client payment for Project X"
                         required
                       />
                     </div>
-                    {/* ✅ Currency Selector inside Modal */}
-                    <CurrencySelector
-                      selectedCurrency={
-                        formData.currency || SUPPORTED_CURRENCIES[0]
-                      }
-                      onCurrencyChange={handleCurrencyChange}
-                    />
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">
-                      Details *
-                    </label>
-                    <textarea
-                      name="details"
-                      value={formData.details}
-                      onChange={handleInputChange}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900"
-                      rows="3"
-                      placeholder="e.g., Client payment for Project X"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">
-                      Payment Method *
-                    </label>
-                    <select
-                      name="paymentMethod"
-                      value={formData.paymentMethod}
-                      onChange={handleInputChange}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-bold"
-                      required
-                    >
-                      <option value="Cash">Cash</option>
-                      <option value="Bank">Bank</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-1">
-                        Inflow (+)
+                        Payment Method *
                       </label>
-                      <input
-                        type="number"
-                        name="inflow"
-                        value={formData.inflow}
+                      <select
+                        name="paymentMethod"
+                        value={formData.paymentMethod}
                         onChange={handleInputChange}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-black"
-                        placeholder="0.00"
-                        step="0.01"
-                        min="0"
-                      />
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-bold"
+                        required
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="Bank">Bank</option>
+                      </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1">
-                        Outflow (-)
-                      </label>
-                      <input
-                        type="number"
-                        name="outflow"
-                        value={formData.outflow}
-                        onChange={handleInputChange}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-black"
-                        placeholder="0.00"
-                        step="0.01"
-                        min="0"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-bold text-gray-700"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 px-4 py-3 bg-[#5247bf] text-white rounded-lg hover:bg-[#4238a6] transition-colors font-bold shadow-md"
-                    >
-                      {editingRecord ? "Update" : "Add"} Record
-                    </button>
-                  </div>
-                </form>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">
+                          Inflow (+)
+                        </label>
+                        <input
+                          type="number"
+                          name="inflow"
+                          value={formData.inflow}
+                          onChange={handleInputChange}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-black"
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">
+                          Outflow (-)
+                        </label>
+                        <input
+                          type="number"
+                          name="outflow"
+                          value={formData.outflow}
+                          onChange={handleInputChange}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] outline-none text-gray-900 font-black"
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-4 sticky bottom-0 bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-bold text-gray-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 px-4 py-3 bg-[#5247bf] text-white rounded-lg hover:bg-[#4238a6] transition-colors font-bold shadow-md"
+                      >
+                        {editingRecord ? "Update" : "Add"} Record
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           )}

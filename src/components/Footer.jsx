@@ -40,9 +40,14 @@ const Footer = () => {
         </div>
         <div>
           <h3 className="font-semibold text-gray-800 mb-3">Legal</h3>
-          <ul className="text-sm text-gray-600 space-y-2 cursor-not-allowed opacity-50">
-            <li>Privacy Policy</li>
-            <li>Terms of Service</li>
+          <ul className="text-sm text-gray-600 space-y-2 ">
+            <li>
+              {" "}
+              <Link to="/privacy-policy">Privacy Policy</Link>
+            </li>
+            <li>
+              <Link to="/terms-conditions">Terms of Service</Link>
+            </li>
           </ul>
         </div>
       </div>

@@ -68,7 +68,7 @@ const ContentCreationBoard = () => {
       id: "tax-calculator",
       title: "Tax Calculator",
       icon: <Calculator className="w-6 h-6" />,
-      description: "Calculate tax liabilities with ease.",
+      description: "Calculate tax liabilities with ease. (Nigeria only)",
       action: () => navigate("/tax-calculator"),
       color: "bg-red-50",
     },

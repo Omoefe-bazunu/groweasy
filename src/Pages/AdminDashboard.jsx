@@ -36,9 +36,10 @@ import {
   Mail,
   Trash2,
   Copy,
+  DollarSign,
 } from "lucide-react";
 import { toast } from "react-toastify";
-import api from "../lib/api"; // ✅ centralized API utility
+import api from "../lib/api";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -49,14 +50,12 @@ export default function AdminDashboard() {
   const [adminPassword, setAdminPassword] = useState("");
   const [modalError, setModalError] = useState("");
 
-  // Data States
   const [users, setUsers] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState([]);
   const [referrers, setReferrers] = useState([]);
 
-  // Metrics State
   const [totalReceipts, setTotalReceipts] = useState(0);
   const [totalInvoices, setTotalInvoices] = useState(0);
   const [totalFinancialRecords, setTotalFinancialRecords] = useState(0);
@@ -65,9 +64,11 @@ export default function AdminDashboard() {
   const [totalInventory, setTotalInventory] = useState(0);
   const [totalPayrolls, setTotalPayrolls] = useState(0);
 
-  // Settings & UI State
+  // Settings
   const [monthlyFee, setMonthlyFee] = useState(3000);
+  const [exchangeRate, setExchangeRate] = useState(1550);
   const [updatingFee, setUpdatingFee] = useState(false);
+
   const [processingId, setProcessingId] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -93,52 +94,49 @@ export default function AdminDashboard() {
 
   const handleExperts = () => navigate("/admin/add-expert");
 
-  // ── Admin Auth ────────────────────────────────────────────────────────────
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     setModalError("");
     setLoading(true);
-
     try {
       await api.post("/admin/login", {
         email: adminEmail.trim(),
         password: adminPassword.trim(),
       });
-
-      // ✅ Success — just open the dashboard
       setIsAdmin(true);
       setShowModal(false);
-    } catch (err) {
+    } catch {
       setModalError("Invalid email or password");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Settings ──────────────────────────────────────────────────────────────
-  const handleUpdateFee = async (e) => {
+  // ── Save both fee and exchange rate together ──────────────────────────────
+  const handleUpdateSettings = async (e) => {
     e.preventDefault();
     if (!monthlyFee || monthlyFee < 0) return toast.warn("Invalid fee amount");
+    if (!exchangeRate || exchangeRate < 1)
+      return toast.warn("Invalid exchange rate");
     setUpdatingFee(true);
     try {
       await setDoc(
         doc(db, "admin", "settings"),
         {
           monthlySubscriptionFee: Number(monthlyFee),
+          exchangeRate: Number(exchangeRate),
           updatedAt: serverTimestamp(),
           updatedBy: user.uid,
         },
         { merge: true },
       );
-      toast.success("Subscription fee updated");
+      toast.success("Settings updated — fee and exchange rate saved");
     } catch {
-      toast.error("Failed to update fee");
+      toast.error("Failed to update settings");
     } finally {
       setUpdatingFee(false);
     }
   };
-
-  // ── Actions — all use api utility, token attached automatically ───────────
 
   const approveSubscription = async (payment) => {
     if (!window.confirm(`Approve ${payment.plan} for ${payment.userEmail}?`))
@@ -226,27 +224,20 @@ export default function AdminDashboard() {
       )
     )
       return;
-
     try {
-      // Calls DELETE /api/contact/MESSAGE_ID
       await api.delete(`/contact/${id}`);
-
-      // Update local state to remove the message from view immediately
       setContacts((prev) => prev.filter((c) => c.id !== id));
-
       toast.success("Message deleted successfully");
     } catch (err) {
-      console.error("Delete error:", err);
       toast.error(err.response?.data?.error || "Failed to delete message");
     }
   };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    toast.success("Bank details copied!");
+    toast.success("Copied!");
   };
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -257,30 +248,32 @@ export default function AdminDashboard() {
     });
   };
 
-  // ✅ Works with ISO string (new system) — no more Firestore Timestamp assumed
   const calculateDaysLeft = (expiryDate) => {
     if (!expiryDate) return 0;
-    const expiry = new Date(expiryDate);
-    const diff = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
+    const diff = Math.ceil(
+      (new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24),
+    );
     return diff > 0 ? diff : 0;
   };
 
-  // ── Data Fetching ─────────────────────────────────────────────────────────
+  // ── Data fetching ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin) return;
 
-    // Settings
+    // Load settings (fee + exchange rate)
     getDoc(doc(db, "admin", "settings")).then((snap) => {
-      if (snap.exists())
-        setMonthlyFee(snap.data().monthlySubscriptionFee || 3000);
+      if (snap.exists()) {
+        const data = snap.data();
+        setMonthlyFee(data.monthlySubscriptionFee || 3000);
+        setExchangeRate(
+          data.exchangeRate || data.usdRate || data.dollarRate || 1550,
+        );
+      }
     });
 
-    // Users — ✅ subscription now lives inside the user doc, no separate collection needed
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
       const userList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setUsers(userList);
-
-      // Build referrers list from user docs directly
       const refs = userList
         .filter(
           (u) => u.referralCount > 0 || u.walletBalance > 0 || u.referralCode,
@@ -289,7 +282,6 @@ export default function AdminDashboard() {
       setReferrers(refs);
     });
 
-    // Pending payments
     const unsubPayments = onSnapshot(
       query(
         collection(db, "pendingPayments"),
@@ -299,7 +291,6 @@ export default function AdminDashboard() {
         setPendingPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     );
 
-    // Withdrawals
     const unsubWithdrawals = onSnapshot(
       query(collection(db, "withdrawals"), orderBy("requestedAt", "desc")),
       (snap) =>
@@ -308,7 +299,6 @@ export default function AdminDashboard() {
         ),
     );
 
-    // Metrics
     const fetchCounts = async () => {
       const cols = [
         "receipts",
@@ -352,10 +342,14 @@ export default function AdminDashboard() {
     );
   }
 
+  // Preview USD prices based on current inputs (before saving)
+  const previewUsd = (naira) =>
+    ((naira / (Number(exchangeRate) || 1550)) * 1.5).toFixed(2);
+
   return (
     <div className="min-h-screen bg-gray-50 pt-10 pb-25 px-4 md:px-6">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* ── Login Modal ─────────────────────────────────────────────────── */}
+        {/* Login Modal */}
         {showModal && (
           <div className="fixed inset-0 text-gray-700 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
@@ -410,7 +404,7 @@ export default function AdminDashboard() {
               Admin Dashboard
             </h1>
 
-            {/* ── Referral Management ──────────────────────────────────────── */}
+            {/* ── Referral Management ── */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-yellow-400/20">
               <button
                 onClick={() => toggleSection("referrals")}
@@ -424,7 +418,6 @@ export default function AdminDashboard() {
 
               {sections.referrals && (
                 <div className="p-6">
-                  {/* Pending Withdrawals */}
                   <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
                     Pending Withdrawals
                   </h3>
@@ -469,7 +462,6 @@ export default function AdminDashboard() {
                                       copyToClipboard(req.bankDetails)
                                     }
                                     className="p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600 rounded transition"
-                                    title="Copy Bank Details"
                                   >
                                     <Copy className="w-5 h-5" />
                                   </button>
@@ -511,7 +503,6 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
-                  {/* Withdrawal History */}
                   {withdrawalRequests.filter((r) => r.status !== "pending")
                     .length > 0 && (
                     <>
@@ -541,11 +532,7 @@ export default function AdminDashboard() {
                                 </p>
                               </div>
                               <span
-                                className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                  req.status === "approved"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-red-100 text-red-700"
-                                }`}
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${req.status === "approved" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
                               >
                                 {req.status.toUpperCase()}
                               </span>
@@ -555,7 +542,6 @@ export default function AdminDashboard() {
                     </>
                   )}
 
-                  {/* Top Referrers */}
                   <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
                     Top Referrers
                   </h3>
@@ -609,7 +595,7 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* ── Subscription Settings ─────────────────────────────────────── */}
+            {/* ── Subscription Settings ── */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
               <button
                 onClick={() => toggleSection("settings")}
@@ -620,42 +606,97 @@ export default function AdminDashboard() {
                 </span>
                 {sections.settings ? <ChevronUp /> : <ChevronDown />}
               </button>
+
               {sections.settings && (
-                <div className="p-6 text-gray-700">
-                  <div className="max-w-md">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Monthly Subscription Fee (₦)
-                    </label>
-                    <div className="flex gap-4">
+                <div className="p-6">
+                  <form
+                    onSubmit={handleUpdateSettings}
+                    className="space-y-6 max-w-lg"
+                  >
+                    {/* Monthly fee */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Monthly Subscription Fee (₦)
+                      </label>
                       <input
                         type="number"
                         value={monthlyFee}
                         onChange={(e) => setMonthlyFee(e.target.value)}
-                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf]"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                        min="0"
+                        required
                       />
-                      <button
-                        onClick={handleUpdateFee}
-                        disabled={updatingFee}
-                        className="bg-[#5247bf] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#4238a6] flex items-center gap-2 disabled:opacity-50"
-                      >
-                        {updatingFee ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Save className="w-4 h-4" />
-                        )}
-                        Save
-                      </button>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Yearly plan = Monthly × 12 = ₦
+                        {(Number(monthlyFee) * 12).toLocaleString()}
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-500 mt-2">
-                      Yearly plan is automatically calculated as Monthly Fee ×
-                      12.
-                    </p>
-                  </div>
+
+                    {/* Exchange rate */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-green-600" />
+                        USD Exchange Rate (₦ per $1)
+                      </label>
+                      <input
+                        type="number"
+                        value={exchangeRate}
+                        onChange={(e) => setExchangeRate(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                        min="1"
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Current rate: ₦1 = $
+                        {(1 / (Number(exchangeRate) || 1550)).toFixed(6)}
+                      </p>
+                    </div>
+
+                    {/* Live USD preview */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                        <DollarSign className="w-3.5 h-3.5" />
+                        International Price Preview (+50% markup)
+                      </p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">
+                          Monthly (USD)
+                        </span>
+                        <span className="font-bold text-gray-900">
+                          ${previewUsd(Number(monthlyFee))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">
+                          Yearly (USD)
+                        </span>
+                        <span className="font-bold text-gray-900">
+                          ${previewUsd(Number(monthlyFee) * 12)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 pt-1 border-t border-gray-200 mt-2">
+                        Formula: (₦ ÷ exchange rate) × 1.5
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={updatingFee}
+                      className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#4238a6] disabled:opacity-50 transition"
+                    >
+                      {updatingFee ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      {updatingFee ? "Saving..." : "Save Settings"}
+                    </button>
+                  </form>
                 </div>
               )}
             </div>
 
-            {/* ── Pending Payment Proofs ────────────────────────────────────── */}
+            {/* ── Pending Payment Proofs ── */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
               <button
                 onClick={() => toggleSection("subscriptions")}
@@ -684,11 +725,7 @@ export default function AdminDashboard() {
                         </p>
                         <div className="mt-3">
                           <span
-                            className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
-                              payment.plan === "yearly"
-                                ? "bg-orange-100 text-orange-800"
-                                : "bg-blue-100 text-blue-800"
-                            }`}
+                            className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${payment.plan === "yearly" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`}
                           >
                             {payment.plan === "yearly" ? "YEARLY" : "MONTHLY"} •
                             ₦{payment.amount}
@@ -736,7 +773,8 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
-            {/* ── Contact Messages ─────────────────────────────────────────── */}
+
+            {/* ── Contact Messages ── */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-indigo-400/20">
               <button
                 onClick={() => toggleSection("messages")}
@@ -793,7 +831,7 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* ── Platform Metrics ──────────────────────────────────────────── */}
+            {/* ── Platform Metrics ── */}
             <div className="bg-white rounded-xl shadow-md text-gray-700">
               <button
                 onClick={() => toggleSection("metrics")}
@@ -845,7 +883,7 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* ── Users Table ───────────────────────────────────────────────── */}
+            {/* ── Users Table ── */}
             <div className="bg-white rounded-xl shadow-md text-gray-700">
               <button
                 onClick={() => toggleSection("users")}
@@ -885,7 +923,6 @@ export default function AdminDashboard() {
                         </thead>
                         <tbody>
                           {users.map((u) => {
-                            // ✅ Read subscription from user doc directly — new system
                             const sub = u.subscription;
                             const isPro =
                               sub?.status === "active" &&
@@ -893,7 +930,6 @@ export default function AdminDashboard() {
                             const daysLeft = isPro
                               ? calculateDaysLeft(sub.expiryDate)
                               : 0;
-
                             return (
                               <tr
                                 key={u.id}
@@ -917,9 +953,8 @@ export default function AdminDashboard() {
                                 <td className="p-3 text-sm">
                                   {isPro ? (
                                     <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold">
-                                      <ShieldCheck className="w-3 h-3" />
-                                      {/* ✅ reads sub.plan not sub.type */}
-                                      PRO ({sub.plan || "Monthly"})
+                                      <ShieldCheck className="w-3 h-3" /> PRO (
+                                      {sub.plan || "Monthly"})
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-semibold">

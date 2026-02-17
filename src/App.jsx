@@ -14,6 +14,8 @@ import About from "./Pages/About";
 import Contact from "./Pages/Contact";
 import Testimonials from "./Pages/Testimonials";
 import KnowledgeBase from "./Pages/KnowledgeBase";
+import PrivacyPolicy from "./Pages/PrivacyPolicy";
+import TermsAndConditions from "./Pages/TermsConditions";
 
 // Authenticated User Pages
 import Dashboard from "./Pages/Dashboard";
@@ -73,6 +75,8 @@ const App = () => {
           <Route path="/testimonials" element={<Testimonials />} />
           <Route path="/tax-calculator" element={<NigeriaTaxCalculator />} />
           <Route path="/knowledge-base" element={<KnowledgeBase />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-conditions" element={<TermsAndConditions />} />
           {/* Public Rating Page (No Nav) */}
           <Route path="/rate/:businessId" element={<PublicRate />} />
 

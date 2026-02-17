@@ -21,7 +21,11 @@ import {
   AlertCircle,
   Clock,
   RefreshCw,
+  ChevronDown,
+  Globe,
 } from "lucide-react";
+
+const USD_MARKUP = 1.5; // Foreign users pay +50%
 
 const Subscribe = () => {
   const { user, userData } = useUser();
@@ -33,29 +37,43 @@ const Subscribe = () => {
   const [plan, setPlan] = useState("monthly");
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [selectedBankIndex, setSelectedBankIndex] = useState(0);
 
-  // ── Pending payment state ─────────────────────────────────────────────────
+  const paymentMethods = [
+    {
+      country: "Nigeria (NGN)",
+      details: [
+        { label: "Bank Name", value: "Kuda MicroFinance Bank" },
+        { label: "Account Name", value: "HIGH-ER ENTERPRISES" },
+        { label: "Account Number", value: "3002638291" },
+      ],
+    },
+    {
+      country: "International (USD)",
+      details: [
+        { label: "Bank Name", value: "Lead Bank" },
+        { label: "Account Name", value: "Omoefe Bazunu" },
+        { label: "Account Number", value: "217577556883" },
+        { label: "Account Type", value: "Checking" },
+        { label: "Wire Routing", value: "101019644" },
+        { label: "ACH Routing", value: "101019644" },
+      ],
+    },
+  ];
+
   const [pendingPayment, setPendingPayment] = useState(null);
   const [checkingPending, setCheckingPending] = useState(true);
-
-  // ── Pricing state ─────────────────────────────────────────────────────────
   const [monthlyFee, setMonthlyFee] = useState(3000);
+  const [exchangeRate, setExchangeRate] = useState(1550); // fallback ₦/$ rate
   const [loadingPrice, setLoadingPrice] = useState(true);
   const [priceError, setPriceError] = useState("");
 
-  const bankDetails = {
-    bankName: "Kuda MicroFinance Bank",
-    accountName: "HIGH-ER ENTERPRISES",
-    accountNumber: "3002638291",
-  };
-
-  // ── Check for existing pending payment on mount ───────────────────────────
+  // Check for existing pending payment
   useEffect(() => {
     if (!user) {
       setCheckingPending(false);
       return;
     }
-
     const checkPending = async () => {
       try {
         const q = query(
@@ -64,10 +82,9 @@ const Subscribe = () => {
           where("status", "==", "pending"),
         );
         const snap = await getDocs(q);
-
         if (!snap.empty) {
-          const doc = snap.docs[0];
-          setPendingPayment({ id: doc.id, ...doc.data() });
+          const d = snap.docs[0];
+          setPendingPayment({ id: d.id, ...d.data() });
         }
       } catch (err) {
         console.error("Failed to check pending payment:", err);
@@ -75,11 +92,10 @@ const Subscribe = () => {
         setCheckingPending(false);
       }
     };
-
     checkPending();
   }, [user]);
 
-  // ── Fetch pricing ─────────────────────────────────────────────────────────
+  // Fetch subscription fee AND exchange rate from admin settings
   useEffect(() => {
     const fetchPricing = async () => {
       try {
@@ -88,18 +104,25 @@ const Subscribe = () => {
 
         if (settingsSnap.exists()) {
           const data = settingsSnap.data();
+
+          // Subscription fee
           const fee =
             data.monthlySubscriptionFee ||
             data.subscriptionFee ||
             data.monthlyFee ||
             data.price;
-
           if (fee && !isNaN(Number(fee))) {
             setMonthlyFee(Number(fee));
-            setPriceError("");
           } else {
             setPriceError("Using default pricing (₦3,000)");
           }
+
+          // Exchange rate — store as e.g. exchangeRate: 1600 in admin settings
+          const rate = data.exchangeRate || data.usdRate || data.dollarRate;
+          if (rate && !isNaN(Number(rate))) {
+            setExchangeRate(Number(rate));
+          }
+          // No error if rate is missing — fallback is silent
         } else {
           setPriceError("Using default pricing (₦3,000)");
         }
@@ -109,20 +132,24 @@ const Subscribe = () => {
         setLoadingPrice(false);
       }
     };
-
     fetchPricing();
   }, []);
+
+  // USD = (NGN / exchangeRate) * 1.5  →  +50% markup for international users
+  const toUsd = (naira) => ((naira / exchangeRate) * USD_MARKUP).toFixed(2);
 
   const plans = {
     monthly: {
       name: "Monthly",
       amount: monthlyFee.toLocaleString(),
+      usdAmount: toUsd(monthlyFee),
       rawAmount: monthlyFee,
       duration: "30 days",
     },
     yearly: {
       name: "Yearly",
       amount: (monthlyFee * 12).toLocaleString(),
+      usdAmount: toUsd(monthlyFee * 12),
       rawAmount: monthlyFee * 12,
       duration: "365 days",
       bestValue: true,
@@ -156,11 +183,9 @@ const Subscribe = () => {
       setError("Please upload your payment screenshot");
       return;
     }
-
     setUploading(true);
     setError("");
     setSuccess(false);
-
     try {
       const fileRef = ref(
         storage,
@@ -173,7 +198,7 @@ const Subscribe = () => {
         userId: user.uid,
         userEmail: user.email,
         userName: userData?.name || "User",
-        plan: plan,
+        plan,
         amount: plans[plan].rawAmount,
         amountDisplay: plans[plan].amount,
         paymentScreenshot: downloadURL,
@@ -181,7 +206,6 @@ const Subscribe = () => {
         status: "pending",
       });
 
-      // ✅ Set pending payment state so UI switches immediately
       setPendingPayment({
         id: docRef.id,
         plan,
@@ -196,15 +220,13 @@ const Subscribe = () => {
       setFile(null);
       const input = document.getElementById("file-upload");
       if (input) input.value = "";
-    } catch (err) {
-      console.error("Upload failed:", err);
+    } catch {
       setError("Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
   };
 
-  // ── Loading state ─────────────────────────────────────────────────────────
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -222,7 +244,6 @@ const Subscribe = () => {
     );
   }
 
-  // ── Already subscribed ────────────────────────────────────────────────────
   if (isPaid) {
     return (
       <div className="min-h-screen max-w-2xl mx-auto text-gray-700 bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-6">
@@ -241,7 +262,6 @@ const Subscribe = () => {
     );
   }
 
-  // ── Pending payment UI ────────────────────────────────────────────────────
   if (pendingPayment) {
     const submittedAt = pendingPayment.requestedAt?.toDate
       ? pendingPayment.requestedAt.toDate()
@@ -252,11 +272,9 @@ const Subscribe = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-xl p-10 text-center max-w-lg w-full">
-          {/* Animated clock icon */}
           <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <Clock className="w-12 h-12 text-orange-500" />
           </div>
-
           <h1 className="text-3xl font-bold text-gray-900 mb-3">
             Payment Under Review
           </h1>
@@ -264,8 +282,6 @@ const Subscribe = () => {
             Your payment proof has been submitted and is being reviewed by our
             team. This usually takes a few hours.
           </p>
-
-          {/* Payment summary card */}
           <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-500 font-medium">Plan</span>
@@ -296,53 +312,18 @@ const Subscribe = () => {
                 })}
               </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 font-medium">Status</span>
-              <span className="inline-flex items-center gap-1.5 bg-orange-100 text-orange-700 text-xs font-bold px-3 py-1 rounded-full">
-                <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse" />
-                Awaiting Approval
-              </span>
-            </div>
           </div>
-
-          {/* Payment proof link */}
-          {pendingPayment.paymentScreenshot && (
-            <a
-              href={pendingPayment.paymentScreenshot}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-[#5247bf] hover:underline text-sm font-medium mb-8"
-            >
-              View your submitted proof ↗
-            </a>
-          )}
-
-          {/* What happens next */}
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-left mb-6">
-            <p className="text-sm font-bold text-blue-800 mb-2">
-              What happens next?
-            </p>
-            <ul className="text-sm text-blue-700 space-y-1.5">
-              <li>✓ Our team reviews your payment screenshot</li>
-              <li>✓ Your account is upgraded within a few hours</li>
-              <li>✓ You'll get full access immediately after approval</li>
-            </ul>
-          </div>
-
-          {/* Refresh hint */}
           <button
             onClick={() => window.location.reload()}
             className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 mx-auto transition"
           >
-            <RefreshCw className="w-4 h-4" />
-            Already approved? Refresh to check
+            <RefreshCw className="w-4 h-4" /> Already approved? Refresh to check
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Default subscribe UI ──────────────────────────────────────────────────
   return (
     <div className="min-h-screen text-gray-700 bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 pb-25 pt-6 px-6">
       <div className="max-w-4xl mx-auto">
@@ -361,16 +342,15 @@ const Subscribe = () => {
         )}
 
         <div className="text-center mb-12 max-w-2xl mx-auto bg-orange-500 p-8 rounded-2xl shadow-lg">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
             Upgrade to Pro
           </h1>
-          <p className="text-lg text-white">
-            Unlock unlimited receipts, invoices, inventory, customer list, &
-            financial records
+          <p className="text-lg text-white opacity-90">
+            Unlock unlimited documents and premium features
           </p>
         </div>
 
-        {/* Plan Selection */}
+        {/* Plan cards */}
         <div className="grid md:grid-cols-2 gap-8 mb-12 max-w-2xl mx-auto">
           {Object.entries(plans).map(([key, p]) => (
             <div
@@ -378,7 +358,7 @@ const Subscribe = () => {
               onClick={() => setPlan(key)}
               className={`relative bg-white rounded-2xl shadow-lg p-8 border-4 transition-all cursor-pointer ${
                 plan === key
-                  ? "border-[#5247bf] shadow-2xl scale-105"
+                  ? "border-[#5247bf] scale-105"
                   : "border-gray-200 hover:border-[#5247bf]/50"
               }`}
             >
@@ -387,34 +367,31 @@ const Subscribe = () => {
                   BEST VALUE
                 </div>
               )}
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-2">
                 <h3 className="text-2xl font-bold text-gray-900">{p.name}</h3>
-                {plan === key && (
-                  <div className="w-8 h-8 bg-[#5247bf] rounded-full flex items-center justify-center">
-                    <Check className="w-5 h-5 text-white" />
-                  </div>
-                )}
+                {plan === key && <Check className="w-6 h-6 text-[#5247bf]" />}
               </div>
               <div className="mb-6">
-                <span className="text-5xl font-bold text-[#5247bf]">
+                <div className="text-4xl font-bold text-[#5247bf]">
                   ₦{p.amount}
-                </span>
-                <span className="text-gray-600">
-                  {" "}
-                  /{key === "monthly" ? "month" : "year"}
-                </span>
+                </div>
+                <div className="text-sm text-gray-500 font-medium mt-1">
+                  Approx.{" "}
+                  <span className="text-orange-600">${p.usdAmount} USD</span>
+                  <span className="ml-1 text-xs text-gray-400">
+                    (intl. rate)
+                  </span>
+                </div>
               </div>
-              <ul className="space-y-3 text-gray-700">
+              <ul className="space-y-3 text-sm">
                 {[
                   "Unlimited Receipts & Invoices",
                   "Unlimited Inventory Items",
-                  "Unlimited Payrolls & Records",
-                  "Unlimited Customer Lists",
+                  "Full Financial Records",
                   "Priority Support",
-                ].map((feature) => (
-                  <li key={feature} className="flex items-center gap-3">
-                    <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    {feature}
+                ].map((f) => (
+                  <li key={f} className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-green-600" /> {f}
                   </li>
                 ))}
               </ul>
@@ -422,102 +399,127 @@ const Subscribe = () => {
           ))}
         </div>
 
-        {/* Payment Form */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl mx-auto">
+        {/* Payment details */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl mx-auto border border-gray-100">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            Complete Your {plans[plan].name} Subscription
+            Payment Details
           </h2>
-
           <div className="space-y-6">
-            {/* Bank Details */}
-            <div className="bg-gray-50 p-6 rounded-xl">
-              {[
-                { label: "Bank Name", value: bankDetails.bankName },
-                { label: "Account Name", value: bankDetails.accountName },
-                { label: "Account Number", value: bankDetails.accountNumber },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  className="flex justify-between items-center mb-3 last:mb-0"
+            <div className="relative">
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">
+                Select Payment Method
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedBankIndex}
+                  onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl font-bold text-gray-800 appearance-none focus:ring-2 focus:ring-[#5247bf] outline-none"
                 >
-                  <span className="font-semibold">{label}:</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={
-                        label === "Account Number" ? "font-mono text-xl" : ""
-                      }
-                    >
-                      {value}
-                    </span>
-                    <button onClick={() => copyToClipboard(value)}>
-                      <Copy className="w-4 h-4 text-gray-500 hover:text-[#5247bf]" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="font-bold text-[#5247bf]">
-                  Amount to Pay: ₦{plans[plan].amount}
-                </p>
+                  {paymentMethods.map((method, idx) => (
+                    <option key={idx} value={idx}>
+                      {method.country}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
               </div>
             </div>
 
-            {/* File Upload */}
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
-              <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-lg font-medium mb-4">
-                Upload Payment Screenshot
+            <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+              <div className="flex items-center gap-2 mb-4 text-[#5247bf]">
+                <Globe className="w-4 h-4" />
+                <span className="text-sm font-bold uppercase tracking-wider">
+                  {paymentMethods[selectedBankIndex].country} Details
+                </span>
+              </div>
+              {paymentMethods[selectedBankIndex].details.map(
+                ({ label, value }) => (
+                  <div
+                    key={label}
+                    className="flex justify-between items-center mb-4 last:mb-0 border-b border-gray-200/50 pb-2 last:border-0 last:pb-0"
+                  >
+                    <span className="text-sm font-medium text-gray-500">
+                      {label}:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-900 text-sm md:text-base">
+                        {value}
+                      </span>
+                      <button
+                        onClick={() => copyToClipboard(value)}
+                        className="p-1 hover:bg-[#5247bf]/10 rounded transition"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-[#5247bf]" />
+                      </button>
+                    </div>
+                  </div>
+                ),
+              )}
+
+              <div className="mt-6 p-4 bg-[#5247bf] rounded-xl text-center">
+                <p className="text-white text-xs font-medium uppercase mb-1">
+                  Pay Exactly
+                </p>
+                {selectedBankIndex === 0 ? (
+                  <p className="text-white font-black text-xl">
+                    ₦{plans[plan].amount}
+                  </p>
+                ) : (
+                  <div>
+                    <p className="text-white font-black text-xl">
+                      ${plans[plan].usdAmount} USD
+                    </p>
+                    <p className="text-white/70 text-xs mt-1">
+                      International rate · includes processing markup
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50/50">
+              <Upload className="w-10 h-10 text-gray-300 mx-auto mb-4" />
+              <p className="text-sm font-bold text-gray-700 mb-4">
+                Upload Proof of Payment
               </p>
               <input
                 id="file-upload"
                 type="file"
                 accept="image/*"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#5247bf] file:text-white hover:file:bg-[#4238a6] cursor-pointer"
+                className="block w-full text-xs text-gray-400 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#5247bf] file:text-white hover:file:bg-[#4238a6] cursor-pointer"
               />
               {file && (
-                <p className="mt-3 text-sm text-green-600">
-                  Selected: {file.name}
+                <p className="mt-3 text-xs text-green-600 font-bold">
+                  ✓ {file.name}
                 </p>
               )}
-              {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+              {error && (
+                <p className="mt-3 text-xs text-red-500 font-bold">{error}</p>
+              )}
             </div>
 
             <button
               onClick={handleSubmitPayment}
               disabled={uploading || !file}
-              className="w-full bg-[#5247bf] text-white py-4 rounded-lg font-semibold hover:bg-[#4238a6] disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-3"
+              className="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold hover:bg-black disabled:bg-gray-300 transition flex items-center justify-center gap-3 shadow-lg"
             >
               {uploading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Submitting...
-                </>
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                "Submit Payment Proof"
+                "Submit Payment for Approval"
               )}
             </button>
-
-            {success && (
-              <div className="bg-green-50 border border-green-200 p-6 rounded-lg text-center">
-                <Check className="w-10 h-10 text-green-600 mx-auto mb-3" />
-                <p className="text-green-800 font-medium">
-                  Submitted successfully!
-                </p>
-                <p className="text-sm text-green-700 mt-2">
-                  Your {plans[plan].name} Pro access will be activated soon.
-                </p>
-              </div>
-            )}
           </div>
         </div>
-
-        {copied && (
-          <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
-            <Check className="w-5 h-5" /> Copied!
-          </div>
-        )}
       </div>
+
+      {copied && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-2 animate-bounce z-50">
+          <Check className="w-4 h-4 text-green-400" />
+          <span className="text-sm font-bold">Details Copied!</span>
+        </div>
+      )}
     </div>
   );
 };
