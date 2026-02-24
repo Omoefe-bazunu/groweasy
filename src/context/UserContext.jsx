@@ -16,13 +16,13 @@ const UserContext = createContext();
 
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState(null);
+  // ✅ Initialize userData from localStorage for instant state recovery
+  const [userData, setUserData] = useState(() => {
+    const saved = localStorage.getItem("groweasy_user_cache");
+    return saved ? JSON.parse(saved) : null;
+  });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-
-  // ✅ Flag to skip /me fetch when signup is in progress
-  // Signup handles its own navigation — we don't want onAuthStateChanged
-  // racing against the backend profile creation
   const isSigningUp = useRef(false);
 
   useEffect(() => {
@@ -30,22 +30,27 @@ export function UserProvider({ children }) {
       setUser(currentUser);
 
       if (currentUser) {
-        // ✅ Skip if signup is in progress — SignUp.jsx handles everything
         if (isSigningUp.current) {
           setLoading(false);
           return;
         }
 
-        // Normal login or page refresh — profile already exists, safe to fetch
         try {
           const res = await api.get("/auth/me");
           setUserData(res.data);
+          // ✅ Cache the user profile for instant load on next refresh
+          localStorage.setItem("groweasy_user_cache", JSON.stringify(res.data));
         } catch (err) {
           console.error("Failed to restore user session:", err.message);
-          setUserData(null);
+          // Don't clear cache immediately on network error, only on 401
+          if (err.response?.status === 401) {
+            setUserData(null);
+            localStorage.removeItem("groweasy_user_cache");
+          }
         }
       } else {
         setUserData(null);
+        localStorage.removeItem("groweasy_user_cache");
       }
 
       setLoading(false);

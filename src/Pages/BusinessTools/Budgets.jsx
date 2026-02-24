@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LayoutList, PlusCircle } from "lucide-react";
 import BudgetList from "../../components/BudgetList";
 import BudgetCreator from "../../components/BudgetCreator";
+import BacktoTools from "../../components/BacktoTools";
 
 const Budgets = () => {
   const [activeTab, setActiveTab] = useState("list");
@@ -24,7 +25,8 @@ const Budgets = () => {
   const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-6 md:pt-6 md:pb-30">
+    <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-20 md:pt-6 md:pb-30">
+      <BacktoTools />
       {/* Tabs Navigation */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 md:px-6">

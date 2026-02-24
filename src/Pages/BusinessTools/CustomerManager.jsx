@@ -6,6 +6,7 @@ import CustomerAnalytics from "../../components/CustomerAnalytics";
 import { useUser } from "../../context/UserContext";
 import { toast } from "react-toastify";
 import api from "../../lib/api";
+import BacktoTools from "../../components/BacktoTools";
 
 const CustomerManager = () => {
   const { user } = useUser();
@@ -76,7 +77,8 @@ const CustomerManager = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-6 md:pt-6">
+    <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-20 md:pt-6">
+      <BacktoTools />
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex space-x-8 overflow-x-auto">

@@ -11,13 +11,15 @@ import {
   Wallet,
   Percent,
 } from "lucide-react";
+import BacktoTools from "../../components/BacktoTools";
 
 const NigeriaTaxCalculator = () => {
   const [activeTab, setActiveTab] = useState("personal");
 
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-32 pt-8 px-4 md:px-12">
+    <div className="min-h-screen bg-gray-50/50 pb-32 pt-8 px-4 md:px-20">
       <div className="max-w-7xl mx-auto">
+        <BacktoTools />
         {/* Header Banner */}
         <div className="bg-[#008751] rounded-2xl p-8 mb-8 shadow-xl text-white relative overflow-hidden">
           <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>

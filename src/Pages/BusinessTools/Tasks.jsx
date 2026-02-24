@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileText, BarChart3 } from "lucide-react";
 import TaskPlanner from "../../components/TaskPlanner";
 import TaskAnalytics from "../../components/TaskAnalytics";
+import BacktoTools from "../../components/BacktoTools";
 
 const Tasks = () => {
   const [activeTab, setActiveTab] = useState("tasks");
@@ -24,7 +25,8 @@ const Tasks = () => {
   const ActiveComponent = tabs.find((tab) => tab.id === activeTab)?.component;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-6 md:pt-6 md:pb-30">
+    <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-20 md:pt-6 md:pb-30">
+      <BacktoTools />
       {/* Tabs Navigation */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 md:px-6">

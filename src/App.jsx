@@ -44,6 +44,8 @@ import Budgets from "./Pages/BusinessTools/Budgets";
 import Subscribe from "./Pages/Subscribe";
 import AdminDashboard from "./Pages/AdminDashboard";
 import AddExpert from "./Pages/AddExpert";
+import Receivables from "./Pages/BusinessTools/Receivables";
+import Payables from "./Pages/BusinessTools/Payables";
 
 const App = () => {
   const location = useLocation();
@@ -77,6 +79,7 @@ const App = () => {
           <Route path="/knowledge-base" element={<KnowledgeBase />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-conditions" element={<TermsAndConditions />} />
+
           {/* Public Rating Page (No Nav) */}
           <Route path="/rate/:businessId" element={<PublicRate />} />
 
@@ -108,6 +111,8 @@ const App = () => {
           <Route path="/customers" element={<CustomerManager />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/budgets" element={<Budgets />} />
+          <Route path="/receivables" element={<Receivables />} />
+          <Route path="/payables" element={<Payables />} />
 
           {/* Subscription */}
           <Route path="/subscribe" element={<Subscribe />} />

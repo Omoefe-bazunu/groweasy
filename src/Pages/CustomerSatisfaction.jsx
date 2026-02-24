@@ -14,6 +14,7 @@ import {
 import { toast } from "react-toastify";
 import QRCode from "react-qr-code";
 import api from "../lib/api";
+import BacktoTools from "../components/BacktoTools";
 
 const CustomerSatisfaction = () => {
   const { user } = useUser();
@@ -135,8 +136,9 @@ const CustomerSatisfaction = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-32 pt-8 px-4 md:px-12">
+    <div className="min-h-screen bg-gray-50/50 pb-32 pt-8 px-4 md:px-20">
       <div className="max-w-7xl mx-auto">
+        <BacktoTools />
         {/* Header Banner */}
         <div className="bg-[#5247bf] rounded-2xl p-8 mb-8 shadow-xl text-white flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="text-center md:text-left">

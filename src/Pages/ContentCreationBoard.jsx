@@ -9,6 +9,8 @@ import {
   ArrowRight,
   Star,
   CalendarCheck2,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 
 const ContentCreationBoard = () => {
@@ -63,7 +65,22 @@ const ContentCreationBoard = () => {
       action: () => navigate("/budgets"),
       color: "bg-red-50",
     },
-
+    {
+      id: "receivables",
+      title: "Receivables",
+      icon: <TrendingUp className="w-6 h-6" />,
+      description: "Track money owed to you by customers.",
+      action: () => navigate("/receivables"),
+      color: "bg-emerald-50",
+    },
+    {
+      id: "payables",
+      title: "Payables",
+      icon: <TrendingDown className="w-6 h-6" />,
+      description: "Manage amounts you owe to suppliers.",
+      action: () => navigate("/payables"),
+      color: "bg-rose-50",
+    },
     {
       id: "tax-calculator",
       title: "Tax Calculator",
@@ -91,7 +108,7 @@ const ContentCreationBoard = () => {
     {
       id: "satisfaction",
       title: "Customer Satisfaction",
-      icon: <Star className="w-6 h-6" />, // Ensure you import Star from 'lucide-react'
+      icon: <Star className="w-6 h-6" />,
       description:
         "Track ratings, analyze scores, and share your feedback link.",
       action: () => navigate("/satisfaction-dashboard"),
@@ -128,14 +145,31 @@ const ContentCreationBoard = () => {
           {creationOptions.map((option) => (
             <div
               key={option.id}
-              onClick={option.action}
-              className="group bg-white/95 border-b-2 border-[#5247bf] backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer flex flex-col justify-between"
+              onClick={option.comingSoon ? undefined : option.action}
+              className={`group bg-white/95 border-b-2 border-[#5247bf] backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 flex flex-col justify-between ${
+                option.comingSoon
+                  ? "opacity-60 cursor-not-allowed"
+                  : "cursor-pointer"
+              }`}
             >
               <div>
+                {option.comingSoon && (
+                  <div className="mb-2">
+                    <span className="inline-block bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded-full">
+                      COMING SOON
+                    </span>
+                  </div>
+                )}
                 <div
-                  className={`w-12 h-12 rounded-xl ${option.color} flex items-center justify-center mb-4 group-hover:bg-[#5247bf] transition-colors duration-300`}
+                  className={`w-12 h-12 rounded-xl ${option.color} flex items-center justify-center mb-4 ${
+                    option.comingSoon ? "" : "group-hover:bg-[#5247bf]"
+                  } transition-colors duration-300`}
                 >
-                  <div className="text-[#5247bf] group-hover:text-white transition-colors duration-300">
+                  <div
+                    className={`text-[#5247bf] ${
+                      option.comingSoon ? "" : "group-hover:text-white"
+                    } transition-colors duration-300`}
+                  >
                     {option.icon}
                   </div>
                 </div>
@@ -147,10 +181,12 @@ const ContentCreationBoard = () => {
                 </p>
               </div>
 
-              <div className="flex items-center justify-between text-[#5247bf] font-bold text-sm">
-                <span>Open Tool</span>
-                <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
-              </div>
+              {!option.comingSoon && (
+                <div className="flex items-center justify-between text-[#5247bf] font-bold text-sm">
+                  <span>Open Tool</span>
+                  <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
+                </div>
+              )}
             </div>
           ))}
         </div>

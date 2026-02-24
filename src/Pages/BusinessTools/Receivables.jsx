@@ -1,24 +1,24 @@
 import { useState } from "react";
-import { Banknote, FileText } from "lucide-react";
-import PayrollCreator from "../../components/PayrollCreator";
-import PayrollList from "../../components/PayrollList";
+import { FileText, List } from "lucide-react";
+import ReceivablesList from "../../components/ReceivablesList";
+import ReceivablesCreator from "../../components/ReceivablesCreator";
 import BacktoTools from "../../components/BacktoTools";
 
-const Payroll = () => {
-  const [activeTab, setActiveTab] = useState("create");
+const Receivables = () => {
+  const [activeTab, setActiveTab] = useState("list");
 
   const tabs = [
     {
-      id: "create",
-      label: "Create Payslip",
-      icon: Banknote,
-      component: PayrollCreator,
+      id: "list",
+      label: "Receivables List",
+      icon: List,
+      component: ReceivablesList,
     },
     {
-      id: "list",
-      label: "Payroll History",
+      id: "creator",
+      label: "Receivables Creator",
       icon: FileText,
-      component: PayrollList,
+      component: ReceivablesCreator,
     },
   ];
 
@@ -27,19 +27,21 @@ const Payroll = () => {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-600 px-4 pt-4 pb-30 md:px-20 md:pt-6 md:pb-30">
       <BacktoTools />
+      {/* Tabs Navigation */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex space-x-8">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 py-4 cursor-pointer px-2 border-b-4 transition-colors ${
+                  className={`flex items-center gap-2 py-4 px-2 border-b-2 transition-colors ${
                     isActive
-                      ? "border-[#10b981] text-[#10b981]"
+                      ? "border-[#5247bf] text-[#5247bf]"
                       : "border-transparent text-gray-600 hover:text-gray-900"
                   }`}
                 >
@@ -51,6 +53,8 @@ const Payroll = () => {
           </div>
         </div>
       </div>
+
+      {/* Tab Content */}
       <div className="transition-all duration-300">
         {ActiveComponent && <ActiveComponent />}
       </div>
@@ -58,4 +62,4 @@ const Payroll = () => {
   );
 };
 
-export default Payroll;
+export default Receivables;
