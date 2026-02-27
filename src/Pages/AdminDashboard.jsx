@@ -41,14 +41,12 @@ import {
 import { toast } from "react-toastify";
 import api from "../lib/api";
 
+const ADMIN_EMAIL = "raniem57@gmail.com";
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showModal, setShowModal] = useState(true);
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [modalError, setModalError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const [users, setUsers] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
@@ -64,13 +62,11 @@ export default function AdminDashboard() {
   const [totalInventory, setTotalInventory] = useState(0);
   const [totalPayrolls, setTotalPayrolls] = useState(0);
 
-  // Settings
   const [monthlyFee, setMonthlyFee] = useState(3000);
   const [exchangeRate, setExchangeRate] = useState(1550);
   const [updatingFee, setUpdatingFee] = useState(false);
 
   const [processingId, setProcessingId] = useState(null);
-  const [loading, setLoading] = useState(false);
 
   const [sections, setSections] = useState({
     users: true,
@@ -86,33 +82,26 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) setUser(currentUser);
-      else navigate("/login");
+      if (!currentUser) {
+        navigate("/login");
+        return;
+      }
+
+      // Check if user is admin
+      if (currentUser.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+        toast.error("Access denied. Admin privileges required.");
+        navigate("/");
+        return;
+      }
+
+      setUser(currentUser);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, [navigate]);
 
   const handleExperts = () => navigate("/admin/add-expert");
 
-  const handleAdminLogin = async (e) => {
-    e.preventDefault();
-    setModalError("");
-    setLoading(true);
-    try {
-      await api.post("/admin/login", {
-        email: adminEmail.trim(),
-        password: adminPassword.trim(),
-      });
-      setIsAdmin(true);
-      setShowModal(false);
-    } catch {
-      setModalError("Invalid email or password");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Save both fee and exchange rate together ──────────────────────────────
   const handleUpdateSettings = async (e) => {
     e.preventDefault();
     if (!monthlyFee || monthlyFee < 0) return toast.warn("Invalid fee amount");
@@ -214,6 +203,10 @@ export default function AdminDashboard() {
       setContacts(res.data);
     } catch (err) {
       console.error("Failed to fetch messages", err);
+      // Don't show error toast on first load if it's auth-related
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        toast.error("Failed to load contact messages");
+      }
     }
   };
 
@@ -256,60 +249,67 @@ export default function AdminDashboard() {
     return diff > 0 ? diff : 0;
   };
 
-  // ── Data fetching ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!user) return;
 
-    // Load settings (fee + exchange rate)
-    getDoc(doc(db, "admin", "settings")).then((snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setMonthlyFee(data.monthlySubscriptionFee || 3000);
-        setExchangeRate(
-          data.exchangeRate || data.usdRate || data.dollarRate || 1550,
-        );
-      }
-    });
-
-    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-      const userList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setUsers(userList);
-      const refs = userList
-        .filter(
-          (u) => u.referralCount > 0 || u.walletBalance > 0 || u.referralCode,
-        )
-        .sort((a, b) => (b.walletBalance || 0) - (a.walletBalance || 0));
-      setReferrers(refs);
-    });
-
-    const unsubPayments = onSnapshot(
-      query(
-        collection(db, "pendingPayments"),
-        where("status", "==", "pending"),
-      ),
-      (snap) =>
-        setPendingPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-    );
-
-    const unsubWithdrawals = onSnapshot(
-      query(collection(db, "withdrawals"), orderBy("requestedAt", "desc")),
-      (snap) =>
-        setWithdrawalRequests(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() })),
-        ),
-    );
-
-    const fetchCounts = async () => {
-      const cols = [
-        "receipts",
-        "invoices",
-        "financialRecords",
-        "tasks",
-        "quotations",
-        "inventory",
-        "payrolls",
-      ];
+    // Small delay to ensure Firebase token is ready
+    const initializeAdminData = async () => {
       try {
+        // Wait for token to be available
+        await user.getIdToken();
+
+        // Load settings
+        const settingsDoc = await getDoc(doc(db, "admin", "settings"));
+        if (settingsDoc.exists()) {
+          const data = settingsDoc.data();
+          setMonthlyFee(data.monthlySubscriptionFee || 3000);
+          setExchangeRate(
+            data.exchangeRate || data.usdRate || data.dollarRate || 1550,
+          );
+        }
+
+        // Set up real-time listeners
+        const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+          const userList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setUsers(userList);
+          const refs = userList
+            .filter(
+              (u) =>
+                u.referralCount > 0 || u.walletBalance > 0 || u.referralCode,
+            )
+            .sort((a, b) => (b.walletBalance || 0) - (a.walletBalance || 0));
+          setReferrers(refs);
+        });
+
+        const unsubPayments = onSnapshot(
+          query(
+            collection(db, "pendingPayments"),
+            where("status", "==", "pending"),
+          ),
+          (snap) =>
+            setPendingPayments(
+              snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+            ),
+        );
+
+        const unsubWithdrawals = onSnapshot(
+          query(collection(db, "withdrawals"), orderBy("requestedAt", "desc")),
+          (snap) =>
+            setWithdrawalRequests(
+              snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+            ),
+        );
+
+        // Fetch counts
+        const cols = [
+          "receipts",
+          "invoices",
+          "financialRecords",
+          "tasks",
+          "quotations",
+          "inventory",
+          "payrolls",
+        ];
         const snaps = await Promise.all(
           cols.map((c) => getDocs(collection(db, c))),
         );
@@ -320,21 +320,25 @@ export default function AdminDashboard() {
         setTotalQuotations(snaps[4].size);
         setTotalInventory(snaps[5].size);
         setTotalPayrolls(snaps[6].size);
-      } catch (e) {
-        console.error("Metrics load failed", e);
+
+        // Fetch contacts via API
+        await fetchContacts();
+
+        return () => {
+          unsubUsers();
+          unsubPayments();
+          unsubWithdrawals();
+        };
+      } catch (err) {
+        console.error("Error initializing admin data:", err);
+        toast.error("Failed to load admin data");
       }
     };
-    fetchCounts();
-    fetchContacts();
 
-    return () => {
-      unsubUsers();
-      unsubPayments();
-      unsubWithdrawals();
-    };
-  }, [isAdmin]);
+    initializeAdminData();
+  }, [user]);
 
-  if (!user) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#5247bf]" />
@@ -342,666 +346,584 @@ export default function AdminDashboard() {
     );
   }
 
-  // Preview USD prices based on current inputs (before saving)
   const previewUsd = (naira) =>
     ((naira / (Number(exchangeRate) || 1550)) * 1.5).toFixed(2);
 
   return (
     <div className="min-h-screen bg-gray-50 pt-10 pb-25 px-4 md:px-6">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Login Modal */}
-        {showModal && (
-          <div className="fixed inset-0 text-gray-700 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Admin Login
-                </h2>
-                <button
-                  onClick={() => navigate("/")}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+        <h1 className="text-3xl md:text-4xl font-bold text-center text-[#5247bf] mb-10">
+          Admin Dashboard
+        </h1>
+
+        {/* Referral Management */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-yellow-400/20">
+          <button
+            onClick={() => toggleSection("referrals")}
+            className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xl font-bold hover:opacity-90 transition"
+          >
+            <span className="flex items-center gap-3 text-gray-700">
+              <Wallet className="w-6 h-6" /> Referral Management
+            </span>
+            {sections.referrals ? <ChevronUp /> : <ChevronDown />}
+          </button>
+
+          {sections.referrals && (
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
+                Pending Withdrawals
+              </h3>
+              {withdrawalRequests.filter((r) => r.status === "pending")
+                .length === 0 ? (
+                <p className="text-gray-500 italic mb-8">
+                  No pending requests.
+                </p>
+              ) : (
+                <div className="space-y-4 mb-8 text-gray-700">
+                  {withdrawalRequests
+                    .filter((r) => r.status === "pending")
+                    .map((req) => (
+                      <div
+                        key={req.id}
+                        className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg"
+                      >
+                        <div className="flex flex-col lg:flex-row justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <p className="font-bold text-gray-800 text-lg">
+                                {req.userName}
+                              </p>
+                              <span className="text-sm text-gray-500">
+                                ({req.email})
+                              </span>
+                            </div>
+                            <p className="text-2xl font-bold text-[#5247bf] mb-3">
+                              ₦{req.amount.toLocaleString()}
+                            </p>
+                            <div className="flex items-start gap-2 bg-white border border-gray-300 p-3 rounded-lg max-w-md mb-2">
+                              <div className="flex-1">
+                                <p className="text-xs text-gray-500 uppercase font-semibold">
+                                  Bank Details
+                                </p>
+                                <p className="text-gray-800 font-medium whitespace-pre-line">
+                                  {req.bankDetails || "No details provided"}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => copyToClipboard(req.bankDetails)}
+                                className="p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600 rounded transition"
+                              >
+                                <Copy className="w-5 h-5" />
+                              </button>
+                            </div>
+                            <p className="text-xs text-gray-400">
+                              Requested:{" "}
+                              {req.requestedAt?.toDate?.().toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 self-start lg:self-center">
+                            <button
+                              onClick={() => handleApproveWithdrawal(req)}
+                              disabled={processingId === req.id}
+                              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:bg-gray-400 font-bold shadow-md transition"
+                            >
+                              {processingId === req.id ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                              ) : (
+                                <Check className="w-5 h-5" />
+                              )}
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleRejectWithdrawal(req.id)}
+                              disabled={processingId === req.id}
+                              className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 flex items-center gap-2 disabled:bg-gray-400 font-bold shadow-md transition"
+                            >
+                              {processingId === req.id ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                              ) : (
+                                <XCircle className="w-5 h-5" />
+                              )}
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {withdrawalRequests.filter((r) => r.status !== "pending").length >
+                0 && (
+                <>
+                  <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 mt-8">
+                    Withdrawal History
+                  </h3>
+                  <div className="space-y-3 mb-8">
+                    {withdrawalRequests
+                      .filter((r) => r.status !== "pending")
+                      .slice(0, 10)
+                      .map((req) => (
+                        <div
+                          key={req.id}
+                          className="bg-gray-50 border border-gray-200 p-4 rounded-lg flex justify-between items-center"
+                        >
+                          <div>
+                            <p className="font-medium text-gray-800">
+                              {req.userName}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              ₦{req.amount.toLocaleString()}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {formatDate(req.processedAt || req.rejectedAt)}
+                            </p>
+                          </div>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-bold ${req.status === "approved" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
+                          >
+                            {req.status.toUpperCase()}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
+
+              <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
+                Top Referrers
+              </h3>
+              <div className="overflow-x-auto text-gray-700">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="p-3">User</th>
+                      <th className="p-3">Code</th>
+                      <th className="p-3">Total Referrals</th>
+                      <th className="p-3">Wallet Bal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {referrers.map((u) => (
+                      <tr key={u.id} className="border-b hover:bg-gray-50">
+                        <td className="p-3 text-gray-800 font-medium">
+                          {u.name}
+                          <br />
+                          <span className="text-xs text-gray-500">
+                            {u.email}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <code className="bg-gray-100 px-2 py-1 rounded text-xs">
+                            {u.referralCode}
+                          </code>
+                        </td>
+                        <td className="p-3 font-bold">
+                          {u.referralCount || 0}
+                        </td>
+                        <td className="p-3 font-bold text-green-600">
+                          ₦{(u.walletBalance || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                    {referrers.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan="4"
+                          className="p-4 text-center text-gray-500"
+                        >
+                          No active referrers found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <form onSubmit={handleAdminLogin} className="space-y-5">
-                <input
-                  type="email"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                  placeholder="admin@higher.com"
-                  required
-                  autoFocus
-                />
-                <input
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#5247bf]"
-                  placeholder="••••••••"
-                  required
-                />
-                {modalError && (
-                  <p className="text-red-600 text-sm">{modalError}</p>
-                )}
+            </div>
+          )}
+        </div>
+
+        {/* Subscription Settings */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
+          <button
+            onClick={() => toggleSection("settings")}
+            className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-gray-800 to-gray-900 text-white text-xl font-bold hover:opacity-90 transition"
+          >
+            <span className="flex items-center gap-3">
+              <Settings className="w-6 h-6" /> Subscription Settings
+            </span>
+            {sections.settings ? <ChevronUp /> : <ChevronDown />}
+          </button>
+
+          {sections.settings && (
+            <div className="p-6">
+              <form
+                onSubmit={handleUpdateSettings}
+                className="space-y-6 max-w-lg"
+              >
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Monthly Subscription Fee (₦)
+                  </label>
+                  <input
+                    type="number"
+                    value={monthlyFee}
+                    onChange={(e) => setMonthlyFee(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                    min="0"
+                    required
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Yearly plan = Monthly × 12 = ₦
+                    {(Number(monthlyFee) * 12).toLocaleString()}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-green-600" />
+                    USD Exchange Rate (₦ per $1)
+                  </label>
+                  <input
+                    type="number"
+                    value={exchangeRate}
+                    onChange={(e) => setExchangeRate(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
+                    min="1"
+                    required
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Current rate: ₦1 = $
+                    {(1 / (Number(exchangeRate) || 1550)).toFixed(6)}
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    International Price Preview (+50% markup)
+                  </p>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Monthly (USD)</span>
+                    <span className="font-bold text-gray-900">
+                      ${previewUsd(Number(monthlyFee))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Yearly (USD)</span>
+                    <span className="font-bold text-gray-900">
+                      ${previewUsd(Number(monthlyFee) * 12)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 pt-1 border-t border-gray-200 mt-2">
+                    Formula: (₦ ÷ exchange rate) × 1.5
+                  </p>
+                </div>
+
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full bg-[#5247bf] text-white py-3 rounded-lg font-semibold hover:bg-[#4238a6] disabled:bg-gray-400 flex justify-center items-center gap-2"
+                  disabled={updatingFee}
+                  className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#4238a6] disabled:opacity-50 transition"
                 >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {loading ? "Verifying..." : "Login as Admin"}
+                  {updatingFee ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {updatingFee ? "Saving..." : "Save Settings"}
                 </button>
               </form>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {isAdmin && (
-          <>
-            <h1 className="text-3xl md:text-4xl font-bold text-center text-[#5247bf] mb-10">
-              Admin Dashboard
-            </h1>
+        {/* Pending Payment Proofs */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
+          <button
+            onClick={() => toggleSection("subscriptions")}
+            className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-[#5247bf] to-[#4238a6] text-white text-xl font-bold hover:opacity-90 transition"
+          >
+            <span className="flex items-center gap-3">
+              <Clock className="w-6 h-6" /> Pending Payment Proofs (
+              {pendingPayments.length})
+            </span>
+            {sections.subscriptions ? <ChevronUp /> : <ChevronDown />}
+          </button>
 
-            {/* ── Referral Management ── */}
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-yellow-400/20">
-              <button
-                onClick={() => toggleSection("referrals")}
-                className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xl font-bold hover:opacity-90 transition"
-              >
-                <span className="flex items-center gap-3 text-gray-700">
-                  <Wallet className="w-6 h-6" /> Referral Management
-                </span>
-                {sections.referrals ? <ChevronUp /> : <ChevronDown />}
-              </button>
-
-              {sections.referrals && (
-                <div className="p-6">
-                  <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
-                    Pending Withdrawals
-                  </h3>
-                  {withdrawalRequests.filter((r) => r.status === "pending")
-                    .length === 0 ? (
-                    <p className="text-gray-500 italic mb-8">
-                      No pending requests.
+          {sections.subscriptions && pendingPayments.length > 0 && (
+            <div className="p-6 space-y-6">
+              {pendingPayments.map((payment) => (
+                <div
+                  key={payment.id}
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-6 flex flex-col lg:flex-row gap-6"
+                >
+                  <div className="flex-1">
+                    <p className="font-bold text-lg">{payment.userEmail}</p>
+                    <p className="text-gray-600">{payment.userName}</p>
+                    <p className="text-sm text-gray-500">
+                      {payment.requestedAt?.toDate?.().toLocaleString() ||
+                        "Just now"}
                     </p>
-                  ) : (
-                    <div className="space-y-4 mb-8 text-gray-700">
-                      {withdrawalRequests
-                        .filter((r) => r.status === "pending")
-                        .map((req) => (
-                          <div
-                            key={req.id}
-                            className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg"
-                          >
-                            <div className="flex flex-col lg:flex-row justify-between gap-4">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <p className="font-bold text-gray-800 text-lg">
-                                    {req.userName}
-                                  </p>
-                                  <span className="text-sm text-gray-500">
-                                    ({req.email})
-                                  </span>
-                                </div>
-                                <p className="text-2xl font-bold text-[#5247bf] mb-3">
-                                  ₦{req.amount.toLocaleString()}
-                                </p>
-                                <div className="flex items-start gap-2 bg-white border border-gray-300 p-3 rounded-lg max-w-md mb-2">
-                                  <div className="flex-1">
-                                    <p className="text-xs text-gray-500 uppercase font-semibold">
-                                      Bank Details
-                                    </p>
-                                    <p className="text-gray-800 font-medium whitespace-pre-line">
-                                      {req.bankDetails || "No details provided"}
-                                    </p>
-                                  </div>
-                                  <button
-                                    onClick={() =>
-                                      copyToClipboard(req.bankDetails)
-                                    }
-                                    className="p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600 rounded transition"
-                                  >
-                                    <Copy className="w-5 h-5" />
-                                  </button>
-                                </div>
-                                <p className="text-xs text-gray-400">
-                                  Requested:{" "}
-                                  {req.requestedAt?.toDate?.().toLocaleString()}
-                                </p>
-                              </div>
-                              <div className="flex gap-2 self-start lg:self-center">
-                                <button
-                                  onClick={() => handleApproveWithdrawal(req)}
-                                  disabled={processingId === req.id}
-                                  className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:bg-gray-400 font-bold shadow-md transition"
-                                >
-                                  {processingId === req.id ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                  ) : (
-                                    <Check className="w-5 h-5" />
-                                  )}
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handleRejectWithdrawal(req.id)}
-                                  disabled={processingId === req.id}
-                                  className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 flex items-center gap-2 disabled:bg-gray-400 font-bold shadow-md transition"
-                                >
-                                  {processingId === req.id ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                  ) : (
-                                    <XCircle className="w-5 h-5" />
-                                  )}
-                                  Reject
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                    <div className="mt-3">
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${payment.plan === "yearly" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`}
+                      >
+                        {payment.plan === "yearly" ? "YEARLY" : "MONTHLY"} • ₦
+                        {payment.amount}
+                      </span>
                     </div>
-                  )}
-
-                  {withdrawalRequests.filter((r) => r.status !== "pending")
-                    .length > 0 && (
-                    <>
-                      <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2 mt-8">
-                        Withdrawal History
-                      </h3>
-                      <div className="space-y-3 mb-8">
-                        {withdrawalRequests
-                          .filter((r) => r.status !== "pending")
-                          .slice(0, 10)
-                          .map((req) => (
-                            <div
-                              key={req.id}
-                              className="bg-gray-50 border border-gray-200 p-4 rounded-lg flex justify-between items-center"
-                            >
-                              <div>
-                                <p className="font-medium text-gray-800">
-                                  {req.userName}
-                                </p>
-                                <p className="text-sm text-gray-600">
-                                  ₦{req.amount.toLocaleString()}
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  {formatDate(
-                                    req.processedAt || req.rejectedAt,
-                                  )}
-                                </p>
-                              </div>
-                              <span
-                                className={`px-3 py-1 rounded-full text-xs font-bold ${req.status === "approved" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
-                              >
-                                {req.status.toUpperCase()}
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    </>
-                  )}
-
-                  <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
-                    Top Referrers
-                  </h3>
-                  <div className="overflow-x-auto text-gray-700">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="p-3">User</th>
-                          <th className="p-3">Code</th>
-                          <th className="p-3">Total Referrals</th>
-                          <th className="p-3">Wallet Bal</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {referrers.map((u) => (
-                          <tr key={u.id} className="border-b hover:bg-gray-50">
-                            <td className="p-3 text-gray-800 font-medium">
-                              {u.name}
-                              <br />
-                              <span className="text-xs text-gray-500">
-                                {u.email}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              <code className="bg-gray-100 px-2 py-1 rounded text-xs">
-                                {u.referralCode}
-                              </code>
-                            </td>
-                            <td className="p-3 font-bold">
-                              {u.referralCount || 0}
-                            </td>
-                            <td className="p-3 font-bold text-green-600">
-                              ₦{(u.walletBalance || 0).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                        {referrers.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan="4"
-                              className="p-4 text-center text-gray-500"
-                            >
-                              No active referrers found.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                    <div className="mt-4">
+                      <a
+                        href={payment.paymentScreenshot}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-[#5247bf] hover:underline font-medium"
+                      >
+                        <Image className="w-5 h-5" /> View Payment Proof
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 self-start lg:self-center">
+                    <button
+                      onClick={() => approveSubscription(payment)}
+                      disabled={processingId === payment.id}
+                      className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium flex items-center gap-2 disabled:bg-gray-400"
+                    >
+                      {processingId === payment.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-5 h-5" />
+                      )}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => rejectSubscription(payment.id)}
+                      disabled={processingId === payment.id}
+                      className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center gap-2 disabled:bg-gray-400"
+                    >
+                      <XCircle className="w-5 h-5" /> Reject
+                    </button>
                   </div>
                 </div>
-              )}
+              ))}
             </div>
-
-            {/* ── Subscription Settings ── */}
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
-              <button
-                onClick={() => toggleSection("settings")}
-                className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-gray-800 to-gray-900 text-white text-xl font-bold hover:opacity-90 transition"
-              >
-                <span className="flex items-center gap-3">
-                  <Settings className="w-6 h-6" /> Subscription Settings
-                </span>
-                {sections.settings ? <ChevronUp /> : <ChevronDown />}
-              </button>
-
-              {sections.settings && (
-                <div className="p-6">
-                  <form
-                    onSubmit={handleUpdateSettings}
-                    className="space-y-6 max-w-lg"
-                  >
-                    {/* Monthly fee */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                        Monthly Subscription Fee (₦)
-                      </label>
-                      <input
-                        type="number"
-                        value={monthlyFee}
-                        onChange={(e) => setMonthlyFee(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
-                        min="0"
-                        required
-                      />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Yearly plan = Monthly × 12 = ₦
-                        {(Number(monthlyFee) * 12).toLocaleString()}
-                      </p>
-                    </div>
-
-                    {/* Exchange rate */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-green-600" />
-                        USD Exchange Rate (₦ per $1)
-                      </label>
-                      <input
-                        type="number"
-                        value={exchangeRate}
-                        onChange={(e) => setExchangeRate(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5247bf] focus:outline-none"
-                        min="1"
-                        required
-                      />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Current rate: ₦1 = $
-                        {(1 / (Number(exchangeRate) || 1550)).toFixed(6)}
-                      </p>
-                    </div>
-
-                    {/* Live USD preview */}
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                        <DollarSign className="w-3.5 h-3.5" />
-                        International Price Preview (+50% markup)
-                      </p>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">
-                          Monthly (USD)
-                        </span>
-                        <span className="font-bold text-gray-900">
-                          ${previewUsd(Number(monthlyFee))}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">
-                          Yearly (USD)
-                        </span>
-                        <span className="font-bold text-gray-900">
-                          ${previewUsd(Number(monthlyFee) * 12)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-400 pt-1 border-t border-gray-200 mt-2">
-                        Formula: (₦ ÷ exchange rate) × 1.5
-                      </p>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={updatingFee}
-                      className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#4238a6] disabled:opacity-50 transition"
-                    >
-                      {updatingFee ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      {updatingFee ? "Saving..." : "Save Settings"}
-                    </button>
-                  </form>
-                </div>
-              )}
+          )}
+          {sections.subscriptions && pendingPayments.length === 0 && (
+            <div className="p-12 text-center text-gray-500 text-lg">
+              No pending payment proofs
             </div>
+          )}
+        </div>
 
-            {/* ── Pending Payment Proofs ── */}
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden text-gray-700">
-              <button
-                onClick={() => toggleSection("subscriptions")}
-                className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-[#5247bf] to-[#4238a6] text-white text-xl font-bold hover:opacity-90 transition"
-              >
-                <span className="flex items-center gap-3">
-                  <Clock className="w-6 h-6" /> Pending Payment Proofs (
-                  {pendingPayments.length})
-                </span>
-                {sections.subscriptions ? <ChevronUp /> : <ChevronDown />}
-              </button>
+        {/* Contact Messages */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-indigo-400/20">
+          <button
+            onClick={() => toggleSection("messages")}
+            className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xl font-bold hover:opacity-90 transition"
+          >
+            <span className="flex items-center gap-3">
+              <Mail className="w-6 h-6" /> User Messages ({contacts.length})
+            </span>
+            {sections.messages ? <ChevronUp /> : <ChevronDown />}
+          </button>
 
-              {sections.subscriptions && pendingPayments.length > 0 && (
-                <div className="p-6 space-y-6">
-                  {pendingPayments.map((payment) => (
+          {sections.messages && (
+            <div className="p-6">
+              {contacts.length === 0 ? (
+                <p className="text-gray-500 italic text-center py-4">
+                  No messages received yet.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {contacts.map((msg) => (
                     <div
-                      key={payment.id}
-                      className="bg-gray-50 border border-gray-200 rounded-xl p-6 flex flex-col lg:flex-row gap-6"
+                      key={msg.id}
+                      className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-indigo-300 transition shadow-sm"
                     >
-                      <div className="flex-1">
-                        <p className="font-bold text-lg">{payment.userEmail}</p>
-                        <p className="text-gray-600">{payment.userName}</p>
-                        <p className="text-sm text-gray-500">
-                          {payment.requestedAt?.toDate?.().toLocaleString() ||
-                            "Just now"}
-                        </p>
-                        <div className="mt-3">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${payment.plan === "yearly" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`}
-                          >
-                            {payment.plan === "yearly" ? "YEARLY" : "MONTHLY"} •
-                            ₦{payment.amount}
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-lg">
+                            {msg.name}
+                          </h4>
+                          <p className="text-sm text-[#5247bf] font-medium">
+                            {msg.email}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="text-xs text-gray-400">
+                            {new Date(msg.createdAt).toLocaleDateString()}
                           </span>
-                        </div>
-                        <div className="mt-4">
-                          <a
-                            href={payment.paymentScreenshot}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-[#5247bf] hover:underline font-medium"
+                          <button
+                            onClick={() => deleteContact(msg.id)}
+                            className="text-red-400 hover:text-red-600 p-1"
                           >
-                            <Image className="w-5 h-5" /> View Payment Proof
-                          </a>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex gap-3 self-start lg:self-center">
-                        <button
-                          onClick={() => approveSubscription(payment)}
-                          disabled={processingId === payment.id}
-                          className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium flex items-center gap-2 disabled:bg-gray-400"
-                        >
-                          {processingId === payment.id ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : (
-                            <CheckCircle className="w-5 h-5" />
-                          )}
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => rejectSubscription(payment.id)}
-                          disabled={processingId === payment.id}
-                          className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center gap-2 disabled:bg-gray-400"
-                        >
-                          <XCircle className="w-5 h-5" /> Reject
-                        </button>
+                      <div className="bg-white p-3 rounded-lg border border-gray-100 text-gray-700 whitespace-pre-line text-sm">
+                        {msg.message}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-              {sections.subscriptions && pendingPayments.length === 0 && (
-                <div className="p-12 text-center text-gray-500 text-lg">
-                  No pending payment proofs
-                </div>
-              )}
             </div>
+          )}
+        </div>
 
-            {/* ── Contact Messages ── */}
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-indigo-400/20">
-              <button
-                onClick={() => toggleSection("messages")}
-                className="w-full flex justify-between items-center p-6 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xl font-bold hover:opacity-90 transition"
-              >
-                <span className="flex items-center gap-3">
-                  <Mail className="w-6 h-6" /> User Messages ({contacts.length})
-                </span>
-                {sections.messages ? <ChevronUp /> : <ChevronDown />}
-              </button>
+        {/* Platform Metrics */}
+        <div className="bg-white rounded-xl shadow-md text-gray-700">
+          <button
+            onClick={() => toggleSection("metrics")}
+            className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
+          >
+            <span>Platform Metrics</span>
+            {sections.metrics ? (
+              <ChevronUp className="w-6 h-6" />
+            ) : (
+              <ChevronDown className="w-6 h-6" />
+            )}
+          </button>
+          {sections.metrics && (
+            <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Users", value: users.length, icon: Users },
+                { label: "Receipts", value: totalReceipts, icon: Receipt },
+                { label: "Invoices", value: totalInvoices, icon: FileText },
+                { label: "Tasks", value: totalTasks, icon: List },
+                { label: "Quotations", value: totalQuotations, icon: FileText },
+                { label: "Inventory", value: totalInventory, icon: FileText },
+                { label: "Payrolls", value: totalPayrolls, icon: FileText },
+                {
+                  label: "Financial Records",
+                  value: totalFinancialRecords,
+                  icon: FileText,
+                },
+              ].map((m, i) => (
+                <div
+                  key={i}
+                  className="p-4 bg-gray-50 rounded-lg flex items-center gap-3"
+                >
+                  <m.icon className="text-blue-600 w-5 h-5" />
+                  <div>
+                    <p className="text-sm text-gray-500">{m.label}</p>
+                    <p className="font-bold text-gray-900">{m.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-              {sections.messages && (
-                <div className="p-6">
-                  {contacts.length === 0 ? (
-                    <p className="text-gray-500 italic text-center py-4">
-                      No messages received yet.
-                    </p>
-                  ) : (
-                    <div className="space-y-4">
-                      {contacts.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-indigo-300 transition shadow-sm"
-                        >
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h4 className="font-bold text-gray-900 text-lg">
-                                {msg.name}
-                              </h4>
-                              <p className="text-sm text-[#5247bf] font-medium">
-                                {msg.email}
-                              </p>
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                              <span className="text-xs text-gray-400">
-                                {new Date(msg.createdAt).toLocaleDateString()}
+        {/* Users Table */}
+        <div className="bg-white rounded-xl shadow-md text-gray-700">
+          <button
+            onClick={() => toggleSection("users")}
+            className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
+          >
+            <span>Users ({users.length})</span>
+            {sections.users ? (
+              <ChevronUp className="w-6 h-6" />
+            ) : (
+              <ChevronDown className="w-6 h-6" />
+            )}
+          </button>
+
+          {sections.users && (
+            <div className="p-4 border-t">
+              {users.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        {[
+                          "Name",
+                          "Email",
+                          "Phone",
+                          "Signed Up",
+                          "Subscription",
+                          "Days Left",
+                        ].map((h) => (
+                          <th
+                            key={h}
+                            className="p-3 text-sm font-semibold text-gray-600"
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((u) => {
+                        const sub = u.subscription;
+                        const isPro =
+                          sub?.status === "active" &&
+                          calculateDaysLeft(sub.expiryDate) > 0;
+                        const daysLeft = isPro
+                          ? calculateDaysLeft(sub.expiryDate)
+                          : 0;
+                        return (
+                          <tr key={u.id} className="border-t hover:bg-gray-50">
+                            <td className="p-3 text-sm">{u.name || "N/A"}</td>
+                            <td className="p-3 text-sm">{u.email || "N/A"}</td>
+                            <td className="p-3 text-sm">
+                              {u.phoneNumber || "N/A"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-4 h-4 text-gray-400" />
+                                {formatDate(u.createdAt)}
                               </span>
-                              <button
-                                onClick={() => deleteContact(msg.id)}
-                                className="text-red-400 hover:text-red-600 p-1"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                          <div className="bg-white p-3 rounded-lg border border-gray-100 text-gray-700 whitespace-pre-line text-sm">
-                            {msg.message}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ── Platform Metrics ── */}
-            <div className="bg-white rounded-xl shadow-md text-gray-700">
-              <button
-                onClick={() => toggleSection("metrics")}
-                className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
-              >
-                <span>Platform Metrics</span>
-                {sections.metrics ? (
-                  <ChevronUp className="w-6 h-6" />
-                ) : (
-                  <ChevronDown className="w-6 h-6" />
-                )}
-              </button>
-              {sections.metrics && (
-                <div className="p-4 border-t grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {[
-                    { label: "Users", value: users.length, icon: Users },
-                    { label: "Receipts", value: totalReceipts, icon: Receipt },
-                    { label: "Invoices", value: totalInvoices, icon: FileText },
-                    { label: "Tasks", value: totalTasks, icon: List },
-                    {
-                      label: "Quotations",
-                      value: totalQuotations,
-                      icon: FileText,
-                    },
-                    {
-                      label: "Inventory",
-                      value: totalInventory,
-                      icon: FileText,
-                    },
-                    { label: "Payrolls", value: totalPayrolls, icon: FileText },
-                    {
-                      label: "Financial Records",
-                      value: totalFinancialRecords,
-                      icon: FileText,
-                    },
-                  ].map((m, i) => (
-                    <div
-                      key={i}
-                      className="p-4 bg-gray-50 rounded-lg flex items-center gap-3"
-                    >
-                      <m.icon className="text-blue-600 w-5 h-5" />
-                      <div>
-                        <p className="text-sm text-gray-500">{m.label}</p>
-                        <p className="font-bold text-gray-900">{m.value}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* ── Users Table ── */}
-            <div className="bg-white rounded-xl shadow-md text-gray-700">
-              <button
-                onClick={() => toggleSection("users")}
-                className="w-full flex justify-between items-center p-4 text-lg font-semibold text-blue-600"
-              >
-                <span>Users ({users.length})</span>
-                {sections.users ? (
-                  <ChevronUp className="w-6 h-6" />
-                ) : (
-                  <ChevronDown className="w-6 h-6" />
-                )}
-              </button>
-
-              {sections.users && (
-                <div className="p-4 border-t">
-                  {users.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead>
-                          <tr className="bg-gray-100">
-                            {[
-                              "Name",
-                              "Email",
-                              "Phone",
-                              "Signed Up",
-                              "Subscription",
-                              "Days Left",
-                            ].map((h) => (
-                              <th
-                                key={h}
-                                className="p-3 text-sm font-semibold text-gray-600"
-                              >
-                                {h}
-                              </th>
-                            ))}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {isPro ? (
+                                <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold">
+                                  <ShieldCheck className="w-3 h-3" /> PRO (
+                                  {sub.plan || "Monthly"})
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-semibold">
+                                  {sub?.status === "trial" ? "Trial" : "Free"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-sm font-medium">
+                              {isPro ? (
+                                <span
+                                  className={
+                                    daysLeft < 5
+                                      ? "text-red-500"
+                                      : "text-gray-900"
+                                  }
+                                >
+                                  {daysLeft} days
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {users.map((u) => {
-                            const sub = u.subscription;
-                            const isPro =
-                              sub?.status === "active" &&
-                              calculateDaysLeft(sub.expiryDate) > 0;
-                            const daysLeft = isPro
-                              ? calculateDaysLeft(sub.expiryDate)
-                              : 0;
-                            return (
-                              <tr
-                                key={u.id}
-                                className="border-t hover:bg-gray-50"
-                              >
-                                <td className="p-3 text-sm">
-                                  {u.name || "N/A"}
-                                </td>
-                                <td className="p-3 text-sm">
-                                  {u.email || "N/A"}
-                                </td>
-                                <td className="p-3 text-sm">
-                                  {u.phoneNumber || "N/A"}
-                                </td>
-                                <td className="p-3 text-sm">
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="w-4 h-4 text-gray-400" />
-                                    {formatDate(u.createdAt)}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-sm">
-                                  {isPro ? (
-                                    <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold">
-                                      <ShieldCheck className="w-3 h-3" /> PRO (
-                                      {sub.plan || "Monthly"})
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-semibold">
-                                      {sub?.status === "trial"
-                                        ? "Trial"
-                                        : "Free"}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-3 text-sm font-medium">
-                                  {isPro ? (
-                                    <span
-                                      className={
-                                        daysLeft < 5
-                                          ? "text-red-500"
-                                          : "text-gray-900"
-                                      }
-                                    >
-                                      {daysLeft} days
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-center text-gray-500 py-8">
-                      No users found.
-                    </p>
-                  )}
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">
+                  No users found.
+                </p>
               )}
             </div>
+          )}
+        </div>
 
-            <button
-              onClick={handleExperts}
-              className="w-full flex justify-between cursor-pointer bg-white rounded-lg shadow-md items-center p-4 text-lg font-semibold text-blue-600 hover:bg-gray-50 transition"
-            >
-              Manage Documents Experts
-            </button>
-          </>
-        )}
+        <button
+          onClick={handleExperts}
+          className="w-full flex justify-between cursor-pointer bg-white rounded-lg shadow-md items-center p-4 text-lg font-semibold text-blue-600 hover:bg-gray-50 transition"
+        >
+          Manage Documents Experts
+        </button>
       </div>
     </div>
   );
