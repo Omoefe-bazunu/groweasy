@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* --- Colors (Maintained) --- */
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-active: var(--brand-active);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-section: var(--brand-section);
+  --color-brand-warm: var(--brand-warm);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border-color);
+
+  /* --- The Font Fix --- */
+  /* This maps Tailwind's 'font-sans' class to your Bricolage variable */
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --brand-dark: #1e1b4b;
+  --brand-primary: #5247bf;
+  --brand-active: #4338ca;
+  --brand-accent: #f59e0b;
+  --brand-section: #f8fafc;
+  --brand-warm: #fffdfd;
+  --foreground: #334155;
+  --border-color: #e2e8f0;
+}
+
+/* GLOBAL STYLES */
+body {
+  background-color: var(--brand-warm);
+  color: var(--foreground);
+  /* Use the mapped font-sans variable here */
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-heading {
+  font-family: var(--font-sans); /* Use Bricolage for all headings */
+  color: "white";
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
