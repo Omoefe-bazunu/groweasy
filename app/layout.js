@@ -15,12 +15,12 @@ const bricolage = Bricolage_Grotesque({
 export const metadata = {
   title: "GrowEasy | Simplify Your Business Processes",
   description: "The ultimate business tool for streamlined workflows.",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "GrowEasy",
-  },
+  // manifest: "/manifest.json",
+  // appleWebApp: {
+  //   capable: true,
+  //   statusBarStyle: "default",
+  //   title: "GrowEasy",
+  // },
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
