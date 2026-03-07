@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react"; // ✅ Added Suspense
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { X, Eye, EyeOff, Loader2, CheckCircle } from "lucide-react";
 
-const Login = () => {
+// ✅ Internal Form Component
+const LoginForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -30,9 +31,7 @@ const Login = () => {
     setError("");
     try {
       await loginWithEmail(email, password);
-      // Success: Swap UI to transition state immediately
       setIsRedirecting(true);
-      // Navigation is already triggered in UserContext.loginWithEmail
     } catch (error) {
       setError(error.message || "Failed to log in");
       setLoading(false);
@@ -57,7 +56,6 @@ const Login = () => {
     }
   };
 
-  // --- Redirecting Transition UI ---
   if (isRedirecting) {
     return (
       <div className="min-h-screen bg-brand-warm flex flex-col items-center justify-center p-6 text-center font-sans">
@@ -209,6 +207,21 @@ const Login = () => {
         </div>
       )}
     </div>
+  );
+};
+
+// ✅ Export with Suspense
+const Login = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-brand-warm flex items-center justify-center font-sans">
+          <Loader2 className="w-10 h-10 animate-spin text-brand-primary" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 };
 

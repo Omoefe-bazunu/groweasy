@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react"; // ✅ Added Suspense
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
@@ -8,7 +8,8 @@ import { Eye, EyeOff, Loader2, CheckCircle } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "@/lib/api";
 
-const SignUp = () => {
+// ✅ Inner component to handle the SearchParams logic
+const SignUpForm = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,7 +19,6 @@ const SignUp = () => {
   const [loading, setLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // ✅ Renamed to isSigningUpRef to satisfy React Compiler
   const { signupWithEmail, setUserData, isSigningUpRef } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -56,12 +56,10 @@ const SignUp = () => {
       setIsRedirecting(true);
       toast.success("Welcome aboard!");
 
-      // ✅ Use the new Ref name
       if (isSigningUpRef) isSigningUpRef.current = false;
 
       router.push("/dashboard");
     } catch (err) {
-      // ✅ Use the new Ref name
       if (isSigningUpRef) isSigningUpRef.current = false;
       setError(err.message || "Failed to sign up");
       setLoading(false);
@@ -196,6 +194,21 @@ const SignUp = () => {
         </p>
       </div>
     </div>
+  );
+};
+
+// ✅ The Main Page Component now wraps the form in Suspense
+const SignUp = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-brand-warm flex items-center justify-center font-sans">
+          <Loader2 className="w-10 h-10 animate-spin text-brand-primary" />
+        </div>
+      }
+    >
+      <SignUpForm />
+    </Suspense>
   );
 };
 
