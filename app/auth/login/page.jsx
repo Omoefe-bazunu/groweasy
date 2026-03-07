@@ -1,19 +1,17 @@
 "use client";
 
-import { useState, Suspense } from "react"; // ✅ Added Suspense
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
-import { X, Eye, EyeOff, Loader2, CheckCircle } from "lucide-react";
+import { X, Eye, EyeOff, Loader2 } from "lucide-react";
 
-// ✅ Internal Form Component
 const LoginForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState("");
@@ -29,13 +27,16 @@ const LoginForm = () => {
 
     setLoading(true);
     setError("");
+
     try {
       await loginWithEmail(email, password);
-      setIsRedirecting(true);
-    } catch (error) {
-      setError(error.message || "Failed to log in");
+      // ✅ Replace instead of push — skips history entry, faster transition
+      router.replace("/dashboard");
+    } catch (err) {
+      setError(err.message || "Failed to log in");
       setLoading(false);
     }
+    // ✅ No finally — keep loading spinner on until dashboard loads
   };
 
   const handlePasswordReset = async (e) => {
@@ -49,30 +50,12 @@ const LoginForm = () => {
       await sendPasswordReset(resetEmail);
       setResetSuccess("Reset link sent! Check your inbox.");
       setTimeout(() => setIsResetModalOpen(false), 3000);
-    } catch (error) {
-      setResetError(error.message || "Failed to send reset link");
+    } catch (err) {
+      setResetError(err.message || "Failed to send reset link");
     } finally {
       setLoading(false);
     }
   };
-
-  if (isRedirecting) {
-    return (
-      <div className="min-h-screen bg-brand-warm flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="animate-in zoom-in fade-in duration-500">
-          <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="w-12 h-12 text-brand-primary animate-pulse" />
-          </div>
-          <h1 className="text-3xl font-black text-brand-dark uppercase tracking-tighter">
-            Welcome Back
-          </h1>
-          <p className="text-gray-500 font-medium mt-2">
-            Preparing your GrowEasy dashboard...
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-brand-section flex items-center justify-center p-4 font-sans text-gray-700">
@@ -142,10 +125,13 @@ const LoginForm = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-primary text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-brand-active transition-all active:scale-95 disabled:bg-gray-200"
+            className="w-full bg-brand-primary text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-brand-active transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? (
-              <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Signing in...
+              </span>
             ) : (
               "Log In"
             )}
@@ -198,7 +184,7 @@ const LoginForm = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-brand-primary text-white py-4 rounded-2xl font-black uppercase"
+                className="w-full bg-brand-primary text-white py-4 rounded-2xl font-black uppercase disabled:opacity-60"
               >
                 {loading ? "Sending..." : "Send Link"}
               </button>
@@ -210,7 +196,6 @@ const LoginForm = () => {
   );
 };
 
-// ✅ Export with Suspense
 const Login = () => {
   return (
     <Suspense

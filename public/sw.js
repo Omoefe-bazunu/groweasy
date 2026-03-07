@@ -1,4 +1,4 @@
-const CACHE_NAME = "groweasy-cache-v1";
+const CACHE_NAME = "groweasy-cache-v2"; // ✅ Bumped to v2 to force update
 
 // ✅ Only cache paths we are 100% sure exist
 const urlsToCache = [
@@ -31,10 +31,26 @@ self.addEventListener("message", (event) => {
   }
 });
 
+/**
+ * ✅ NETWORK-FIRST STRATEGY
+ * This is crucial for your deployment. It tells the app:
+ * 1. Try to get the latest version from the internet first.
+ * 2. If the internet is available, update the cache and show the new page.
+ * 3. If there is no internet, only then show the cached version.
+ */
 self.addEventListener("fetch", (event) => {
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    }),
+    fetch(event.request)
+      .then((response) => {
+        // If the request is successful, clone it and put it in the cache
+        return caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, response.clone());
+          return response;
+        });
+      })
+      .catch(() => {
+        // If the network fails (no internet), fall back to the cache
+        return caches.match(event.request);
+      }),
   );
 });
