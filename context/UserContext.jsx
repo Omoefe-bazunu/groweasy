@@ -19,34 +19,38 @@ export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const router = useRouter();
-
-  // ✅ Renamed with "Ref" suffix to satisfy React Compiler's strict mutation rules
   const isSigningUpRef = useRef(false);
   const isLoggingInRef = useRef(false);
 
-  // 1. Initial hydration for localStorage (Next.js SSR safety)
+  // 🚀 OPTIMIZATION 1: Async localStorage hydration
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("groweasy_user_cache");
-      if (saved) {
-        try {
-          setUserData(JSON.parse(saved));
-        } catch (e) {
-          console.error("Failed to parse user cache");
+      // Use requestIdleCallback for non-blocking read
+      const loadCache = () => {
+        const saved = localStorage.getItem("groweasy_user_cache");
+        if (saved) {
+          try {
+            setUserData(JSON.parse(saved));
+          } catch (e) {
+            console.error("Failed to parse user cache");
+          }
         }
+      };
+
+      if ("requestIdleCallback" in window) {
+        requestIdleCallback(loadCache);
+      } else {
+        setTimeout(loadCache, 0);
       }
     }
   }, []);
 
-  // 2. Auth State Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
 
       if (currentUser) {
-        // ✅ Check renamed Refs
         if (isSigningUpRef.current || isLoggingInRef.current) {
           setLoading(false);
           return;
@@ -55,7 +59,23 @@ export function UserProvider({ children }) {
         try {
           const res = await api.get("/auth/me");
           setUserData(res.data);
-          localStorage.setItem("groweasy_user_cache", JSON.stringify(res.data));
+
+          // 🚀 OPTIMIZATION 2: Async localStorage write
+          if ("requestIdleCallback" in window) {
+            requestIdleCallback(() => {
+              localStorage.setItem(
+                "groweasy_user_cache",
+                JSON.stringify(res.data),
+              );
+            });
+          } else {
+            setTimeout(() => {
+              localStorage.setItem(
+                "groweasy_user_cache",
+                JSON.stringify(res.data),
+              );
+            }, 0);
+          }
         } catch (err) {
           console.error("Session restoration failed:", err.message);
           if (err.response?.status === 401) {
@@ -75,7 +95,7 @@ export function UserProvider({ children }) {
   }, []);
 
   const signupWithEmail = async (name, email, password) => {
-    isSigningUpRef.current = true; // ✅ Safe mutation
+    isSigningUpRef.current = true;
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -91,22 +111,51 @@ export function UserProvider({ children }) {
   };
 
   const loginWithEmail = async (email, password) => {
-    isLoggingInRef.current = true; // ✅ Safe mutation
+    isLoggingInRef.current = true;
     setLoading(true);
+
     try {
+      // 🚀 STEP 1: Firebase auth
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email,
         password,
       );
 
-      // Fetch data immediately
-      const res = await api.get("/auth/me");
-      setUserData(res.data);
-      localStorage.setItem("groweasy_user_cache", JSON.stringify(res.data));
-
-      toast.success("Welcome back!");
+      // 🚀 STEP 2: Navigate IMMEDIATELY (don't wait for API)
       router.push("/dashboard");
+
+      // 🚀 STEP 3: Fetch data in background (non-blocking)
+      api
+        .get("/auth/me")
+        .then((res) => {
+          setUserData(res.data);
+          // Async localStorage write
+          if ("requestIdleCallback" in window) {
+            requestIdleCallback(() => {
+              localStorage.setItem(
+                "groweasy_user_cache",
+                JSON.stringify(res.data),
+              );
+            });
+          } else {
+            setTimeout(() => {
+              localStorage.setItem(
+                "groweasy_user_cache",
+                JSON.stringify(res.data),
+              );
+            }, 0);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch user data:", err);
+        });
+
+      // 🚀 STEP 4: Show toast AFTER navigation starts (non-blocking)
+      requestAnimationFrame(() => {
+        toast.success("Welcome back!", { autoClose: 2000 });
+      });
+
       return userCredential.user;
     } catch (err) {
       const msg = err.code?.startsWith("auth/")
@@ -119,36 +168,17 @@ export function UserProvider({ children }) {
     }
   };
 
-  // const logout = async () => {
-  //   try {
-  //     setUserData(null);
-  //     setUser(null);
-  //     localStorage.removeItem("groweasy_user_cache");
-  //     await signOut(auth);
-  //     router.push("/auth/login"); // Updated path
-  //     toast.success("Signed out");
-  //   } catch (err) {
-  //     throw new Error("Logout failed");
-  //   }
-  // };
-
   const logout = async () => {
     try {
-      // 1. Clear local cache immediately
       localStorage.removeItem("groweasy_user_cache");
-
-      // 2. Set user states to null FIRST
-      // This triggers a re-render in components using the user,
-      // often triggering their useEffect cleanup functions.
       setUserData(null);
       setUser(null);
-
-      // 3. Perform the Firebase SignOut
       await signOut(auth);
-
-      // 4. Redirect
       router.push("/auth/login");
-      toast.success("Signed out successfully");
+
+      requestAnimationFrame(() => {
+        toast.success("Signed out successfully", { autoClose: 2000 });
+      });
     } catch (err) {
       console.error("Logout Error:", err);
       throw new Error("Logout failed");
@@ -159,7 +189,16 @@ export function UserProvider({ children }) {
     try {
       const res = await api.get("/auth/me");
       setUserData(res.data);
-      localStorage.setItem("groweasy_user_cache", JSON.stringify(res.data));
+
+      if ("requestIdleCallback" in window) {
+        requestIdleCallback(() => {
+          localStorage.setItem("groweasy_user_cache", JSON.stringify(res.data));
+        });
+      } else {
+        setTimeout(() => {
+          localStorage.setItem("groweasy_user_cache", JSON.stringify(res.data));
+        }, 0);
+      }
     } catch (err) {
       console.error("Refresh failed:", err.message);
     }
@@ -176,7 +215,7 @@ export function UserProvider({ children }) {
         loading,
         refreshUserData,
         setUserData,
-        isSigningUpRef, // Pass the Ref for use in SignUp page
+        isSigningUpRef,
       }}
     >
       {children}

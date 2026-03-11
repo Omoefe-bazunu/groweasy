@@ -2,7 +2,6 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { X, Eye, EyeOff, Loader2 } from "lucide-react";
 
@@ -19,7 +18,6 @@ const LoginForm = () => {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   const { loginWithEmail, sendPasswordReset } = useUser();
-  const router = useRouter();
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
@@ -30,13 +28,12 @@ const LoginForm = () => {
 
     try {
       await loginWithEmail(email, password);
-      // ✅ Replace instead of push — skips history entry, faster transition
-      router.replace("/dashboard");
+      // ✅ REMOVED: No duplicate navigation - handled in UserContext
+      // ✅ Keep loading state active until dashboard loads
     } catch (err) {
       setError(err.message || "Failed to log in");
-      setLoading(false);
+      setLoading(false); // Only reset on error
     }
-    // ✅ No finally — keep loading spinner on until dashboard loads
   };
 
   const handlePasswordReset = async (e) => {
