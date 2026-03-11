@@ -312,7 +312,7 @@ const QuotationsList = () => {
             </p>
           </div>
           <button
-            onClick={() => (window.location.href = "/quotations")}
+            onClick={() => (window.location.href = "/businesstools/quotation")}
             className="flex items-center gap-2 bg-[#0ea5e9] text-white px-6 py-3 rounded-lg hover:bg-[#0284c7] transition-colors"
           >
             <Plus className="w-5 h-5" /> Create Quotation

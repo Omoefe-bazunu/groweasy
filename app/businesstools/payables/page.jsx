@@ -6,20 +6,20 @@ import PayablesCreator from "@/components/Payables/PayablesCreator";
 import BacktoTools from "@/components/Shared/BacktoTools";
 
 const Payables = () => {
-  const [activeTab, setActiveTab] = useState("list");
+  const [activeTab, setActiveTab] = useState("create");
 
   const tabs = [
     {
-      id: "list",
-      label: "Payables List",
-      icon: List,
-      component: PayablesList,
-    },
-    {
-      id: "creator",
-      label: "Payables Creator",
+      id: "create",
+      label: "Create",
       icon: FileText,
       component: PayablesCreator,
+    },
+    {
+      id: "list",
+      label: "List",
+      icon: List,
+      component: PayablesList,
     },
   ];
 

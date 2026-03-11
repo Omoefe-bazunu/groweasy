@@ -6,20 +6,20 @@ import BudgetCreator from "@/components/Budget/BudgetCreator";
 import BacktoTools from "@/components/Shared/BacktoTools";
 
 const Budgets = () => {
-  const [activeTab, setActiveTab] = useState("list");
+  const [activeTab, setActiveTab] = useState("create");
 
   const tabs = [
-    {
-      id: "list",
-      label: "List",
-      icon: LayoutList,
-      component: BudgetList,
-    },
     {
       id: "create",
       label: "Create",
       icon: PlusCircle,
       component: BudgetCreator,
+    },
+    {
+      id: "list",
+      label: "List",
+      icon: LayoutList,
+      component: BudgetList,
     },
   ];
 
@@ -58,7 +58,7 @@ const Budgets = () => {
       {/* Tab Content */}
       <div className="transition-all duration-300">
         {ActiveComponent && (
-          <ActiveComponent onSaved={() => setActiveTab("list")} />
+          <ActiveComponent onSaved={() => setActiveTab("create")} />
         )}
       </div>
     </div>

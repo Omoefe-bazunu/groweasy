@@ -261,7 +261,7 @@ const PayrollList = () => {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Payroll History</h1>
           <button
-            onClick={() => (window.location.href = "/payroll")}
+            onClick={() => (window.location.href = "/businesstools/payroll")}
             className="flex items-center gap-2 bg-[#10b981] text-white px-6 py-3 rounded-lg hover:bg-[#059669] transition"
           >
             <Plus className="w-5 h-5" /> New Payslip

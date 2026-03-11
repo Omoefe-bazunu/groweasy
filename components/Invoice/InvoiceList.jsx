@@ -292,7 +292,7 @@ const InvoicesList = () => {
             <p className="text-gray-600 mt-1">Manage all your invoices</p>
           </div>
           <button
-            onClick={() => (window.location.href = "/invoices")}
+            onClick={() => (window.location.href = "/businesstools/invoice")}
             className="flex items-center gap-2 bg-[#5247bf] text-white px-6 py-3 rounded-lg hover:bg-[#4238a6] transition-colors"
           >
             <Plus className="w-5 h-5" /> Create Invoice

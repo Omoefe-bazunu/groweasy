@@ -6,20 +6,20 @@ import ReceivablesCreator from "@/components/Receivables/ReceivablesCreator";
 import BacktoTools from "@/components/Shared/BacktoTools";
 
 const Receivables = () => {
-  const [activeTab, setActiveTab] = useState("list");
+  const [activeTab, setActiveTab] = useState("create");
 
   const tabs = [
+    {
+      id: "create",
+      label: "Create",
+      icon: FileText,
+      component: ReceivablesCreator,
+    },
     {
       id: "list",
       label: "List",
       icon: List,
       component: ReceivablesList,
-    },
-    {
-      id: "creator",
-      label: "Create",
-      icon: FileText,
-      component: ReceivablesCreator,
     },
   ];
 
