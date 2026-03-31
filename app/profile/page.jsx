@@ -26,7 +26,6 @@ import {
   Loader2,
 } from "lucide-react";
 
-// Move static data outside to prevent unnecessary re-renders
 const STAT_CONFIG = [
   { key: "receipts", label: "Receipts", icon: Receipt },
   { key: "invoices", label: "Invoices", icon: FileText },
@@ -59,20 +58,17 @@ const UserProfile = () => {
   });
   const [countsLoading, setCountsLoading] = useState(true);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push("/");
-    } catch (err) {
-      console.error("Logout failed:", err);
+  // ✅ FIX: Move redirection to useEffect
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/auth/login");
     }
-  };
+  }, [user, authLoading, router]);
 
   useEffect(() => {
     if (!user?.uid) return;
 
     let isMounted = true;
-
     const fetchCounts = async () => {
       try {
         const results = await Promise.all(
@@ -97,7 +93,6 @@ const UserProfile = () => {
     };
 
     fetchCounts();
-
     return () => {
       isMounted = false;
     };
@@ -107,8 +102,18 @@ const UserProfile = () => {
     return Object.values(counts).reduce((a, b) => a + b, 0);
   }, [counts]);
 
-  // Comprehensive Loading State
-  if (authLoading || subLoading) {
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push("/");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
+
+  // ✅ Change the conditional return logic:
+  // Show loading if auth is loading OR if there is no user yet (while we wait for the useEffect to redirect)
+  if (authLoading || subLoading || !user) {
     return (
       <section className="flex flex-col items-center justify-center min-h-screen bg-white py-20">
         <Loader2 className="w-10 h-10 animate-spin text-[#5247bf] mb-4" />
@@ -119,12 +124,7 @@ const UserProfile = () => {
     );
   }
 
-  // Redirect if no user (safety check)
-  if (!user || !userData) {
-    router.push("/auth/login");
-    return null;
-  }
-
+  // If we get here, we have a user and data is ready
   return (
     <div className="min-h-screen bg-gray-50/50 pb-32 pt-8 px-4 md:px-12 text-gray-700 font-sans">
       <div className="max-w-7xl mx-auto">
@@ -151,13 +151,13 @@ const UserProfile = () => {
           {/* User Info Card */}
           <div className="lg:col-span-1 bg-white rounded-3xl shadow-lg p-8 border border-gray-100 flex flex-col items-center text-center">
             <div className="w-28 h-28 bg-gradient-to-br from-[#5247bf] to-[#4238a6] rounded-full flex items-center justify-center text-white text-4xl font-black mb-6 shadow-xl">
-              {userData.name?.[0]?.toUpperCase() || "U"}
+              {userData?.name?.[0]?.toUpperCase() || "U"}
             </div>
             <h2 className="text-2xl font-black text-gray-900 mb-1 uppercase tracking-tight">
-              {userData.name || "User"}
+              {userData?.name || "User"}
             </h2>
             <p className="text-gray-500 mb-1 font-bold">{user.email}</p>
-            {userData.phoneNumber && (
+            {userData?.phoneNumber && (
               <p className="text-gray-400 text-sm font-medium">
                 {userData.phoneNumber}
               </p>
