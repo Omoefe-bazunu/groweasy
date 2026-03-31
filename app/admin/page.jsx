@@ -130,17 +130,21 @@ export default function AdminDashboard() {
   const approveSubscription = async (payment) => {
     if (!window.confirm(`Approve ${payment.plan} for ${payment.userEmail}?`))
       return;
+
     setProcessingId(payment.id);
     try {
       await api.post("/admin/approve-payment", {
         paymentId: payment.id,
         userId: payment.userId,
-        amount: payment.amount,
+        userEmail: payment.userEmail,
+        userName: payment.userName,
+        // ✅ FIX: Use amountDisplay since that is the field name in your Firestore
+        amount: payment.amountDisplay,
         plan: payment.plan,
       });
       toast.success("Subscription approved & commissions paid");
     } catch (err) {
-      toast.error(err.message || "Failed to approve payment");
+      toast.error(err.response?.data?.error || "Failed to approve payment");
     } finally {
       setProcessingId(null);
     }
