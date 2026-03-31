@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { useUser } from "@/context/UserContext";
 import { useSubscription } from "@/context/SubscriptionContext";
 import {
@@ -12,6 +11,7 @@ import {
   Lock,
   Share2,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 
 // Reusable item defined OUTSIDE to avoid re-renders
@@ -20,7 +20,7 @@ const DashboardGridItem = ({ title, desc, icon, color, onClick, btnLabel }) => (
     onClick={onClick}
     className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-md p-6 flex flex-col items-start justify-between border-2 border-transparent hover:border-[#5247bf]/20 transition-all duration-300 cursor-pointer group"
   >
-    <div className="mb-6">
+    <div className="mb-6 w-full">
       <div
         className={`${color} w-14 h-14 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-[#5247bf] group-hover:text-white transition-all duration-300`}
       >
@@ -41,15 +41,35 @@ const DashboardGridItem = ({ title, desc, icon, color, onClick, btnLabel }) => (
 
 const Dashboard = () => {
   const router = useRouter();
-  const { userData } = useUser();
-  const { isPaid, planLabel, planType, daysRemaining } = useSubscription();
 
-  // Navigation handlers using router.push
+  // ✅ Extract loading states to prevent UI flickering
+  const { userData, loading: authLoading } = useUser();
+  const {
+    isPaid,
+    planLabel,
+    planType,
+    daysRemaining,
+    loading: subLoading,
+  } = useSubscription();
+
+  // Navigation handlers
   const handleCreations = () => router.push("/businesstools");
   const handleUserProfile = () => router.push("/profile");
   const handleViewDocuments = () => router.push("/documents");
   const handleUpgrade = () => router.push("/subscribe");
   const handleReferrals = () => router.push("/referrals");
+
+  // ✅ Show loading state if either Auth or Subscription is fetching
+  if (authLoading || subLoading) {
+    return (
+      <div className="min-h-screen bg-brand-warm flex flex-col items-center justify-center font-sans">
+        <Loader2 className="w-12 h-12 animate-spin text-[#5247bf] mb-4" />
+        <p className="text-[#5247bf] font-black uppercase tracking-widest text-xs">
+          Loading Workspace...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen pb-24 pt-8 px-4 md:pt-12 md:px-12 animate-in fade-in duration-700 font-sans">
@@ -129,7 +149,7 @@ const Dashboard = () => {
           {/* Partner Program Card */}
           <div
             onClick={handleReferrals}
-            className="bg-linear-to-br from-indigo-900 to-[#5247bf] rounded-2xl shadow-xl p-8 flex flex-col justify-center text-white cursor-pointer hover:scale-[1.01] transition-all duration-300 relative overflow-hidden group border border-white/5"
+            className="bg-gradient-to-br from-indigo-900 to-[#5247bf] rounded-2xl shadow-xl p-8 flex flex-col justify-center text-white cursor-pointer hover:scale-[1.01] transition-all duration-300 relative overflow-hidden group border border-white/5"
           >
             <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-[#5247bf]/20 rounded-full blur-3xl group-hover:bg-[#5247bf]/40 transition-all" />
 
@@ -140,9 +160,10 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <h2 className="text-xl font-black uppercase tracking-tight">
-                    Partner Program (Nigeria only)
+                    Partner Program (Nigerians Only)
                   </h2>
-                  {userData?.referralCode ? (
+                  {/* Logic check: Ensure balance only shows if they have a referral code or earnings */}
+                  {userData?.referralCode || userData?.walletBalance > 0 ? (
                     <div className="flex flex-col mt-2">
                       <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">
                         Available Balance

@@ -1,13 +1,19 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useMemo } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import { useUser } from "./UserContext";
 import api from "@/lib/api";
 
 const SubscriptionContext = createContext();
 
 export const SubscriptionProvider = ({ children }) => {
-  // ✅ 1. Pull 'loading' (the auth status) from UserContext
   const { userData, loading: authLoading } = useUser();
 
   const [subscription, setSubscription] = useState(null);
@@ -15,9 +21,27 @@ export const SubscriptionProvider = ({ children }) => {
   const [daysRemaining, setDaysRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // ✅ 1. Re-usable fetch function for initial load and manual refreshes
+  const fetchStatus = useCallback(async () => {
+    if (!userData) return;
+
+    setLoading(true);
+    try {
+      const res = await api.get("/subscription/status");
+      setSubscription(res.data.subscription);
+      setIsPaid(res.data.isPaid);
+      setDaysRemaining(res.data.daysRemaining);
+    } catch (err) {
+      console.error("Failed to fetch subscription:", err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [userData]);
+
+  // ✅ 2. Handle Auth State Changes
   useEffect(() => {
-    // ✅ 2. ONLY fetch if auth is finished loading AND we have a user
-    // If auth is still loading, we stay in a waiting state.
+    let isMounted = true;
+
     if (authLoading) return;
 
     if (!userData) {
@@ -28,26 +52,16 @@ export const SubscriptionProvider = ({ children }) => {
       return;
     }
 
-    const fetchStatus = async () => {
-      setLoading(true);
-      try {
-        // Now that authLoading is false, Firebase auth.currentUser is guaranteed
-        // to be available for the interceptor in @/lib/api.js
-        const res = await api.get("/subscription/status");
-        setSubscription(res.data.subscription);
-        setIsPaid(res.data.isPaid);
-        setDaysRemaining(res.data.daysRemaining);
-      } catch (err) {
-        console.error("Failed to fetch subscription:", err.message);
-      } finally {
-        setLoading(false);
-      }
+    const loadData = async () => {
+      await fetchStatus();
     };
 
-    fetchStatus();
+    if (isMounted) loadData();
 
-    // ✅ 3. Add authLoading to the dependency array
-  }, [userData, authLoading]);
+    return () => {
+      isMounted = false;
+    };
+  }, [userData, authLoading, fetchStatus]);
 
   // --- Derived Values ---
   const planType = useMemo(
@@ -65,26 +79,33 @@ export const SubscriptionProvider = ({ children }) => {
     [subscription],
   );
 
-  // --- Async Helpers ---
-  const canWriteTo = async (collectionName) => {
-    if (!userData) return false;
-    try {
-      const res = await api.get(`/subscription/can-write/${collectionName}`);
-      return res.data.canWrite;
-    } catch {
-      return false;
-    }
-  };
+  // --- Memoized Async Helpers ---
+  // useCallback is vital here so child components can use these in useEffect
+  const canWriteTo = useCallback(
+    async (collectionName) => {
+      if (!userData) return false;
+      try {
+        const res = await api.get(`/subscription/can-write/${collectionName}`);
+        return res.data.canWrite;
+      } catch {
+        return false;
+      }
+    },
+    [userData],
+  );
 
-  const getLimitStatus = async (collectionName) => {
-    if (!userData) return { reached: true, current: 0, limit: 10 };
-    try {
-      const res = await api.get(`/subscription/can-write/${collectionName}`);
-      return res.data;
-    } catch {
-      return { reached: true, current: 0, limit: 10 };
-    }
-  };
+  const getLimitStatus = useCallback(
+    async (collectionName) => {
+      if (!userData) return { reached: true, current: 0, limit: 10 };
+      try {
+        const res = await api.get(`/subscription/can-write/${collectionName}`);
+        return res.data;
+      } catch {
+        return { reached: true, current: 0, limit: 10 };
+      }
+    },
+    [userData],
+  );
 
   return (
     <SubscriptionContext.Provider
@@ -98,6 +119,7 @@ export const SubscriptionProvider = ({ children }) => {
         subscriptionStatus,
         canWriteTo,
         getLimitStatus,
+        refreshSubscription: fetchStatus, // ✅ Exposed for post-payment updates
       }}
     >
       {children}

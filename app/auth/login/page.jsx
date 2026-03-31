@@ -27,12 +27,17 @@ const LoginForm = () => {
     setError("");
 
     try {
+      // 🚀 SPEED FIX: We do NOT 'await' the whole function if we want
+      // the transition to feel instant, but since 'loginWithEmail'
+      // now redirects internally, we just trigger it.
       await loginWithEmail(email, password);
-      // ✅ REMOVED: No duplicate navigation - handled in UserContext
-      // ✅ Keep loading state active until dashboard loads
+
+      // ✅ Note: We DO NOT call setLoading(false) here.
+      // We want the button to stay in the "Signing in..." state
+      // until the browser physically leaves this page.
     } catch (err) {
       setError(err.message || "Failed to log in");
-      setLoading(false); // Only reset on error
+      setLoading(false); // ❌ Only reset if there is an error
     }
   };
 
@@ -46,7 +51,8 @@ const LoginForm = () => {
     try {
       await sendPasswordReset(resetEmail);
       setResetSuccess("Reset link sent! Check your inbox.");
-      setTimeout(() => setIsResetModalOpen(false), 3000);
+      // Faster modal close for better feel
+      setTimeout(() => setIsResetModalOpen(false), 2000);
     } catch (err) {
       setResetError(err.message || "Failed to send reset link");
     } finally {
@@ -80,7 +86,7 @@ const LoginForm = () => {
               placeholder="name@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-brand-primary font-bold text-gray-800 transition-all"
+              className="w-full p-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-brand-primary font-bold text-gray-800 transition-all outline-none"
               required
             />
           </div>
@@ -95,7 +101,7 @@ const LoginForm = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-brand-primary font-bold text-gray-800 transition-all"
+                className="w-full p-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-brand-primary font-bold text-gray-800 transition-all outline-none"
                 required
               />
               <button
@@ -127,7 +133,7 @@ const LoginForm = () => {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Signing in...
+                Wait...
               </span>
             ) : (
               "Log In"
@@ -175,7 +181,7 @@ const LoginForm = () => {
                 placeholder="Enter registered email"
                 value={resetEmail}
                 onChange={(e) => setResetEmail(e.target.value)}
-                className="w-full p-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-brand-primary font-bold"
+                className="w-full p-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-brand-primary font-bold outline-none"
                 required
               />
               <button
@@ -197,7 +203,7 @@ const Login = () => {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-brand-warm flex items-center justify-center font-sans">
+        <div className="min-h-screen bg-brand-section flex items-center justify-center font-sans">
           <Loader2 className="w-10 h-10 animate-spin text-brand-primary" />
         </div>
       }
