@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import { Eye, EyeOff, Loader2, CheckCircle } from "lucide-react";
@@ -20,22 +20,10 @@ const SignUpForm = () => {
 
   const { signupWithEmail, setUserData, isSigningUpRef } = useUser();
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  // Get ref from URL directly
-  const queryRef = searchParams.get("ref");
-
-  useEffect(() => {
-    // Backup: store in localStorage if present in URL for persistence across refreshes
-    if (queryRef) {
-      localStorage.setItem("referralCode", queryRef);
-    }
-  }, [queryRef]);
 
   const handleEmailSignUp = async (e) => {
     e.preventDefault();
 
-    // 1. Basic Validation
     if (!name || !email || !password || !phoneNumber) {
       return setError("Please fill in all fields");
     }
@@ -43,7 +31,6 @@ const SignUpForm = () => {
       return setError("Password must be at least 6 characters");
     }
 
-    // Basic Phone Validation (Allows +, numbers, 10-15 digits)
     const phoneRegex = /^\+?[0-9]{10,15}$/;
     if (!phoneRegex.test(phoneNumber.replace(/\s/g, ""))) {
       return setError("Please enter a valid phone number");
@@ -53,39 +40,22 @@ const SignUpForm = () => {
     setError("");
 
     try {
-      // 2. Primary Authentication
       await signupWithEmail(name, email, password);
 
-      // 3. Referral & Profile Completion
-      // We use the query param directly, falling back to localStorage if they refreshed
-      const finalReferralCode =
-        queryRef || localStorage.getItem("referralCode");
+      await api.post("/auth/complete-signup", {
+        name,
+        email,
+        phoneNumber,
+      });
 
-      try {
-        await api.post("/referral/complete-signup", {
-          name,
-          email,
-          phoneNumber,
-          referralCode: finalReferralCode || null,
-        });
-      } catch (refErr) {
-        // Log referral error but don't block the user from entering the app
-        console.error("Referral tracking failed:", refErr);
-      }
-
-      // 4. Fetch User Profile
       const res = await api.get("/auth/me");
       setUserData(res.data);
 
-      // Cleanup
-      localStorage.removeItem("referralCode");
       if (isSigningUpRef) isSigningUpRef.current = false;
 
-      // 5. Success State
       setIsRedirecting(true);
       toast.success("Welcome aboard!");
 
-      // Delay slightly for UX before push
       setTimeout(() => {
         router.push("/dashboard");
       }, 1500);

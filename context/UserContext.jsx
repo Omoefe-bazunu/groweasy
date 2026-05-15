@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useRef } from "react";
-import { auth, db } from "@/lib/firebase"; // ✅ Ensure db is exported from your firebase config
+import { auth, db } from "@/lib/firebase"; 
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -9,7 +9,7 @@ import {
   updateProfile,
   onAuthStateChanged,
 } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore"; // ✅ Added for real-time speed
+import { doc, onSnapshot } from "firebase/firestore"; 
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import api from "@/lib/api";

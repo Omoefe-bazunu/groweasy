@@ -3,18 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { useSubscription } from "@/context/SubscriptionContext";
-import {
-  FileText,
-  User,
-  File,
-  CheckCircle,
-  Lock,
-  Share2,
-  ArrowRight,
-  Loader2,
-} from "lucide-react";
+import { FileText, User, File, CheckCircle, Lock, Loader2 } from "lucide-react";
 
-// Reusable item defined OUTSIDE to avoid re-renders
 const DashboardGridItem = ({ title, desc, icon, color, onClick, btnLabel }) => (
   <div
     onClick={onClick}
@@ -42,8 +32,7 @@ const DashboardGridItem = ({ title, desc, icon, color, onClick, btnLabel }) => (
 const Dashboard = () => {
   const router = useRouter();
 
-  // ✅ Extract loading states to prevent UI flickering
-  const { userData, loading: authLoading } = useUser();
+  const { loading: authLoading } = useUser();
   const {
     isPaid,
     planLabel,
@@ -52,14 +41,11 @@ const Dashboard = () => {
     loading: subLoading,
   } = useSubscription();
 
-  // Navigation handlers
   const handleCreations = () => router.push("/businesstools");
   const handleUserProfile = () => router.push("/profile");
   const handleViewDocuments = () => router.push("/documents");
   const handleUpgrade = () => router.push("/subscribe");
-  const handleReferrals = () => router.push("/referrals");
 
-  // ✅ Show loading state if either Auth or Subscription is fetching
   if (authLoading || subLoading) {
     return (
       <div className="min-h-screen bg-brand-warm flex flex-col items-center justify-center font-sans">
@@ -81,107 +67,68 @@ const Dashboard = () => {
       </div>
 
       <div className="max-w-6xl mx-auto space-y-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Subscription Status Card */}
-          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-lg p-6 border border-gray-100 flex flex-col justify-between hover:shadow-xl transition-shadow">
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  {isPaid ? (
-                    <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
-                      <CheckCircle className="w-8 h-8 text-green-600" />
-                    </div>
-                  ) : (
-                    <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center">
-                      <Lock className="w-8 h-8 text-orange-600" />
-                    </div>
-                  )}
-                  <div>
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">
-                      {isPaid ? "Pro Plan Active" : planLabel || "Free Plan"}
-                    </h2>
-                    {isPaid && (
-                      <p className="text-xs font-black text-gray-400 uppercase tracking-widest mt-0.5">
-                        {planType} • {daysRemaining} days left
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {!isPaid && (
-                  <button
-                    onClick={handleUpgrade}
-                    className="hidden sm:block bg-[#5247bf] text-white px-6 py-2 rounded-xl hover:bg-[#4238a6] font-black text-xs uppercase tracking-widest transition-all shadow-md active:scale-95"
-                  >
-                    Upgrade
-                  </button>
-                )}
-              </div>
-
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+        {/* Subscription Status Card */}
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-lg p-6 border border-gray-100 flex flex-col justify-between hover:shadow-xl transition-shadow">
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
                 {isPaid ? (
-                  <p className="text-green-700 text-sm font-bold">
-                    ✓ Unlimited documents & records enabled.
-                  </p>
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-8 h-8 text-green-600" />
+                  </div>
                 ) : (
-                  <div className="text-sm text-gray-600 space-y-1">
-                    <p className="font-medium">
-                      Limited to 10 documents per category
-                    </p>
-                    <p className="text-[#5247bf] font-black uppercase text-xs tracking-tighter">
-                      Upgrade for unlimited business scaling
-                    </p>
+                  <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center">
+                    <Lock className="w-8 h-8 text-orange-600" />
                   </div>
                 )}
-              </div>
-            </div>
-
-            {!isPaid && (
-              <button
-                onClick={handleUpgrade}
-                className="mt-4 sm:hidden w-full bg-[#5247bf] text-white px-5 py-3 rounded-xl font-black uppercase tracking-widest transition active:scale-95"
-              >
-                Upgrade Now
-              </button>
-            )}
-          </div>
-
-          {/* Partner Program Card */}
-          <div
-            onClick={handleReferrals}
-            className="bg-gradient-to-br from-indigo-900 to-[#5247bf] rounded-2xl shadow-xl p-8 flex flex-col justify-center text-white cursor-pointer hover:scale-[1.01] transition-all duration-300 relative overflow-hidden group border border-white/5"
-          >
-            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-[#5247bf]/20 rounded-full blur-3xl group-hover:bg-[#5247bf]/40 transition-all" />
-
-            <div className="flex items-center justify-between z-10">
-              <div className="flex items-center gap-5">
-                <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
-                  <Share2 className="w-8 h-8 text-yellow-400" />
-                </div>
                 <div>
-                  <h2 className="text-xl font-black uppercase tracking-tight">
-                    Partner Program (Nigerians Only)
+                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">
+                    {isPaid ? "Pro Plan Active" : planLabel || "Free Plan"}
                   </h2>
-                  {/* Logic check: Ensure balance only shows if they have a referral code or earnings */}
-                  {userData?.referralCode || userData?.walletBalance > 0 ? (
-                    <div className="flex flex-col mt-2">
-                      <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">
-                        Available Balance
-                      </span>
-                      <span className="text-2xl font-black text-green-400 tracking-tighter">
-                        ₦{(userData.walletBalance || 0).toLocaleString()}
-                      </span>
-                    </div>
-                  ) : (
-                    <p className="text-gray-400 text-sm font-bold mt-1">
-                      Earn 25% commission on Pro upgrades
+                  {isPaid && (
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mt-0.5">
+                      {planType} • {daysRemaining} days left
                     </p>
                   )}
                 </div>
               </div>
-              <ArrowRight className="w-8 h-8 text-white/20 group-hover:text-white transform group-hover:translate-x-2 transition-all" />
+
+              {!isPaid && (
+                <button
+                  onClick={handleUpgrade}
+                  className="hidden sm:block bg-[#5247bf] text-white px-6 py-2 rounded-xl hover:bg-[#4238a6] font-black text-xs uppercase tracking-widest transition-all shadow-md active:scale-95"
+                >
+                  Upgrade
+                </button>
+              )}
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+              {isPaid ? (
+                <p className="text-green-700 text-sm font-bold">
+                  ✓ Unlimited documents & records enabled.
+                </p>
+              ) : (
+                <div className="text-sm text-gray-600 space-y-1">
+                  <p className="font-medium">
+                    Limited to 10 documents per category
+                  </p>
+                  <p className="text-[#5247bf] font-black uppercase text-xs tracking-tighter">
+                    Upgrade for unlimited business scaling
+                  </p>
+                </div>
+              )}
             </div>
           </div>
+
+          {!isPaid && (
+            <button
+              onClick={handleUpgrade}
+              className="mt-4 sm:hidden w-full bg-[#5247bf] text-white px-5 py-3 rounded-xl font-black uppercase tracking-widest transition active:scale-95"
+            >
+              Upgrade Now
+            </button>
+          )}
         </div>
 
         {/* Business Tools Grid */}

@@ -76,7 +76,7 @@ const Contact = () => {
                       Email Us
                     </p>
                     <p className="text-gray-700 font-medium">
-                      support@higher.com.ng
+                      business@groweasy.com.ng
                     </p>
                   </div>
                 </div>
@@ -105,7 +105,7 @@ const Contact = () => {
                       rel="noreferrer"
                       className="text-[#5247bf] font-medium hover:underline"
                     >
-                      www.higher.com.ng
+                      www.higherenterprises.co.uk
                     </a>
                   </div>
                 </div>
